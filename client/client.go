@@ -90,7 +90,8 @@ func createClientConfig(ca, crt, key string) (*tls.Config, error) {
 	}, nil
 }
 
-func SendData(addr, ca, crt, key string) {
+func SendData(addr, ca, crt, key, ipAddr, port,
+	reqSubDomain string, data []byte) {
 	// addr := *connect
 	if !strings.Contains(addr, ":") {
 		addr += ":8443"
@@ -120,8 +121,13 @@ func SendData(addr, ca, crt, key string) {
 	}
 
 	// Request /hello via the created HTTPS client over port 8443 via GET
-	r, err := client.Get(fmt.Sprintf("https://%s/hello", addr))
-	CheckErr(err, "SendData/r")
+	// r, err := client.Get(fmt.Sprintf("https://%s/hello", addr))
+	// CheckErr(err, "SendData/r")
+
+	// =======POST
+	url := fmt.Sprintf("https://%s:%s/%s", ipAddr,
+		port, reqSubDomain)
+	r, err := client.Post(url, "application/json", bytes.NewBuffer(data))
 
 	// Read the response body
 	defer r.Body.Close()
