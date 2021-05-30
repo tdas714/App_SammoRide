@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/dgraph-io/badger"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -24,6 +25,7 @@ type ClientInfo struct {
 	City       string `yaml:"City"`
 	IP         string `yaml:"IP"`
 	Postalcode string `yaml:"PostalCode"`
+	Port       string `yaml:"Port"`
 }
 
 func (c *ClientInfo) GetConf(filename string) *ClientInfo {
@@ -37,9 +39,9 @@ func (c *ClientInfo) GetConf(filename string) *ClientInfo {
 }
 
 func SendEnrollRequest(country, name, province, city, postC,
-	ipAddr, serverIp, serverPort string) {
+	ipAddr, lPort, serverIp, serverPort string) {
 	enrollReq := &PeerEnrollDataRequest{Country: country, Name: name, Province: province, IpAddr: ipAddr,
-		City: city, PostalCode: postC}
+		City: city, PostalCode: postC, ListingPort: lPort}
 	json_data, err := json.Marshal(enrollReq)
 	if err != nil {
 		log.Fatal(err)
@@ -117,17 +119,41 @@ func createClientConfig(ca, crt, key string) (*tls.Config, error) {
 	}, nil
 }
 
-func gossipHandler(w http.ResponseWriter, r *http.Request) {
+func gossipHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	CheckErr(err, "gossipRequest")
-	fmt.Println("Poking from ", string(bodyBytes))
+
+	lenData, err := ioutil.ReadFile(("../database/PeerList.len"))
+	CheckErr(err, "gossipHandler/Lendata")
+
+	curLen := ByteArrayToInt(lenData) + 1
+
+	err = ioutil.WriteFile("../database/PeerList.len",
+		IntToByteArray(curLen), 0700)
+
+	body := string(bodyBytes)
+	fmt.Println("Poking from ", body)
+
+	err = db.Update(func(txn *badger.Txn) error {
+		// bodySplited := strings.Split(body, ":")
+		err := txn.Set(IntToByteArray(curLen), []byte(body))
+		return err
+	})
+	CheckErr(err, "gossipHandler/upadateBadger")
 	// Write "Hello, world!" to the response body
 	io.WriteString(w, "Lets gossip!\n")
 }
 
 func StartPeerServer(ipAddr, port, caPath, crtPath, keyPath string) {
+	//Open peerlist database
+	db, err := badger.Open(badger.DefaultOptions("../database/Peerlist"))
+	CheckErr(err, "StartPeerServer/Open Peerlist database")
+	defer db.Close()
+
 	// Set up a /hello resource handler
-	http.HandleFunc("/gossip", gossipHandler) //This can be diffrent for diffrent data types
+	http.HandleFunc("/gossip", func(rw http.ResponseWriter, r *http.Request) {
+		gossipHandler(rw, r, db)
+	}) //This can be diffrent for diffrent data types
 
 	tlsConfig, err := createClientConfig(caPath, crtPath, keyPath)
 	CheckErr(err, "StartOrederServer/config")

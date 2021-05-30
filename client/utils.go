@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"unsafe"
 )
 
 const (
@@ -18,12 +19,13 @@ const (
 )
 
 type PeerEnrollDataRequest struct {
-	Country    string
-	Name       string
-	Province   string
-	IpAddr     string
-	City       string
-	PostalCode string
+	Country     string
+	Name        string
+	Province    string
+	IpAddr      string
+	City        string
+	PostalCode  string
+	ListingPort string
 }
 
 type PeerEnrollDataResponse struct {
@@ -33,6 +35,7 @@ type PeerEnrollDataResponse struct {
 	PrivateKey []byte
 	SenderCert []byte
 	RootCert   []byte
+	PeerList   []string
 }
 
 func GetIP() string {
@@ -82,4 +85,23 @@ func GetBytes(key interface{}) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func IntToByteArray(num int64) []byte {
+	size := int(unsafe.Sizeof(num))
+	arr := make([]byte, size)
+	for i := 0; i < size; i++ {
+		byt := *(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(&num)) + uintptr(i)))
+		arr[i] = byt
+	}
+	return arr
+}
+
+func ByteArrayToInt(arr []byte) int64 {
+	val := int64(0)
+	size := len(arr)
+	for i := 0; i < size; i++ {
+		*(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(&val)) + uintptr(i))) = arr[i]
+	}
+	return val
 }

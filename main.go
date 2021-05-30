@@ -11,19 +11,21 @@ func main() {
 	InputYml := flag.String("in", "InputFile", "InfoFile")
 	flag.Parse()
 
-	var c client.ClientInfo
-	c.GetConf(*InputYml)
+	node := NewNode(*InputYml)
 
-	fmt.Println(c.City, c.Country, c.Name)
-	// client.SendEnrollRequest(c.Country, c.Name,
-	// 	c.Province, c.City, c.Postalcode, client.GetIP())
+	fmt.Println(node.Info.City, node.Info.Country, node.Info.Name)
+	// client.SendEnrollRequest(node.Info.Country, node.Info.Name,
+	// 	node.Info.Province, node.Info.City, node.Info.Postalcode, client.GetIP())
+
 	cPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.crt",
-		c.Country, c.Name, c.Province,
-		c.City)
+		node.Info.Country, node.Info.Name, node.Info.Province,
+		node.Info.City)
 	kPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.key",
-		c.Country, c.Name, c.Province,
-		c.City)
+		node.Info.Country, node.Info.Name, node.Info.Province,
+		node.Info.City)
 
-	client.SendData(c.IP, "CAs/rootCa.crt",
-		cPath, kPath, "127.0.0.1", "8443", "hello", []byte(c.Name))
+	go node.JoinNetwork()
+
+	client.SendData(node.Info.IP, "CAs/rootCa.crt",
+		cPath, kPath, "127.0.0.1", "8443", "hello", []byte(node.Info.Name))
 }
