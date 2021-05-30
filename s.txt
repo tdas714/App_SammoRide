@@ -1,0 +1,11 @@
+gossip about announcment, world State
+create node structure with yml data, peer type, peerlist, private certificate.
+
+Create Node will send data to many of the ordering service node already comes with application. Those ordering service will respond will correct ordering service based on geography. Sends a peer-List based on that perticuler ordering sevice.
+
+Node Join Network Method: Start listing for gossip data.
+Send signal that it is active
+
+
+ATTENTIONS:
+If every node is verified by root ca , ordering service can run without consent using root ca. Find a way to revoke cetificte

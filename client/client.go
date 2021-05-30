@@ -7,14 +7,37 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	yaml "gopkg.in/yaml.v3"
 )
 
-func SendEnrollRequest(country, name, province, city, postC, ipAddr string) {
+type ClientInfo struct {
+	Country    string `yaml:"Country"`
+	Name       string `yaml:"Name"`
+	Province   string `yaml:"Province"`
+	City       string `yaml:"City"`
+	IP         string `yaml:"IP"`
+	Postalcode string `yaml:"PostalCode"`
+}
+
+func (c *ClientInfo) GetConf(filename string) *ClientInfo {
+
+	yamlFile, err := ioutil.ReadFile(filename)
+	CheckErr(err, "YamlFile Get")
+	err = yaml.Unmarshal(yamlFile, c)
+	CheckErr(err, " Unmarshal Error")
+
+	return c
+}
+
+func SendEnrollRequest(country, name, province, city, postC,
+	ipAddr, serverIp, serverPort string) {
 	enrollReq := &PeerEnrollDataRequest{Country: country, Name: name, Province: province, IpAddr: ipAddr,
 		City: city, PostalCode: postC}
 	json_data, err := json.Marshal(enrollReq)
@@ -22,7 +45,9 @@ func SendEnrollRequest(country, name, province, city, postC, ipAddr string) {
 		log.Fatal(err)
 	}
 
-	path := fmt.Sprintf("http://localhost:8080/post")
+	path := fmt.Sprintf(fmt.Sprintf("http://%s:%s/post",
+		serverIp, serverPort))
+
 	resp, err := http.Post(path, "application/json", bytes.NewBuffer(json_data))
 	CheckErr(err, "SendEnrollRequest/Post")
 
@@ -86,8 +111,35 @@ func createClientConfig(ca, crt, key string) (*tls.Config, error) {
 
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		RootCAs:      roots,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    roots,
+		RootCAs:      roots, // This Needs ATTENTION
 	}, nil
+}
+
+func gossipHandler(w http.ResponseWriter, r *http.Request) {
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	CheckErr(err, "gossipRequest")
+	fmt.Println("Poking from ", string(bodyBytes))
+	// Write "Hello, world!" to the response body
+	io.WriteString(w, "Lets gossip!\n")
+}
+
+func StartPeerServer(ipAddr, port, caPath, crtPath, keyPath string) {
+	// Set up a /hello resource handler
+	http.HandleFunc("/gossip", gossipHandler) //This can be diffrent for diffrent data types
+
+	tlsConfig, err := createClientConfig(caPath, crtPath, keyPath)
+	CheckErr(err, "StartOrederServer/config")
+
+	server := &http.Server{
+		Addr:      ipAddr + ":" + port,
+		TLSConfig: tlsConfig,
+	}
+
+	// Listen to HTTPS connections with the server certificate and wait
+	log.Fatal(server.ListenAndServeTLS(crtPath, keyPath))
+
 }
 
 func SendData(addr, ca, crt, key, ipAddr, port,

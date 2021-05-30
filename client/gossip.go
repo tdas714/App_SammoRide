@@ -1,10 +1,11 @@
 package client
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v3"
 )
 
 type PeerGossipData struct {
@@ -19,9 +20,13 @@ func Gossip(db *badger.DB, lenData int, data []byte) {
 	err := db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(string(selectedId)))
 		CheckErr(err, "Gossip/item")
-		val, err := item.Value()
+		err = item.Value(func(val []byte) error {
+			fmt.Println(val)
+			return nil
+		})
 		return err
 	})
+
 	CheckErr(err, "Gossip/dbView")
 
 }
