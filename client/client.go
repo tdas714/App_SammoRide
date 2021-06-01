@@ -14,7 +14,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dgraph-io/badger"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -66,6 +65,8 @@ func SendEnrollRequest(country, name, province, city, postC,
 	CheckErr(err, "SendErollReq/interca")
 	err = ioutil.WriteFile("CAs/rootCa.crt", res.RootCert, 0700)
 	CheckErr(err, "SendErollReq/rootca")
+
+	SavePeerList("database/"+name, res.PeerList)
 
 	blocks, _ := pem.Decode(res.PeerCert)
 	if blocks == nil {
@@ -119,40 +120,20 @@ func createClientConfig(ca, crt, key string) (*tls.Config, error) {
 	}, nil
 }
 
-func gossipHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
+func gossipHandler(w http.ResponseWriter, r *http.Request, name string) {
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	CheckErr(err, "gossipRequest")
-
-	lenData, err := ioutil.ReadFile(("../database/PeerList.len"))
-	CheckErr(err, "gossipHandler/Lendata")
-
-	curLen := ByteArrayToInt(lenData) + 1
-
-	err = ioutil.WriteFile("../database/PeerList.len",
-		IntToByteArray(curLen), 0700)
-
-	body := string(bodyBytes)
-	fmt.Println("Poking from ", body)
-
-	err = db.Update(func(txn *badger.Txn) error {
-		// bodySplited := strings.Split(body, ":")
-		err := txn.Set(IntToByteArray(curLen), []byte(body))
-		return err
-	})
-	CheckErr(err, "gossipHandler/upadateBadger")
+	SavePeerList("database/"+name, []string{string(bodyBytes)})
 	// Write "Hello, world!" to the response body
+	fmt.Println("Gossip from: ", r.RemoteAddr)
 	io.WriteString(w, "Lets gossip!\n")
 }
 
-func StartPeerServer(ipAddr, port, caPath, crtPath, keyPath string) {
-	//Open peerlist database
-	db, err := badger.Open(badger.DefaultOptions("../database/Peerlist"))
-	CheckErr(err, "StartPeerServer/Open Peerlist database")
-	defer db.Close()
+func StartPeerServer(name, ipAddr, port, caPath, crtPath, keyPath string) {
 
 	// Set up a /hello resource handler
 	http.HandleFunc("/gossip", func(rw http.ResponseWriter, r *http.Request) {
-		gossipHandler(rw, r, db)
+		gossipHandler(rw, r, name)
 	}) //This can be diffrent for diffrent data types
 
 	tlsConfig, err := createClientConfig(caPath, crtPath, keyPath)
@@ -162,6 +143,7 @@ func StartPeerServer(ipAddr, port, caPath, crtPath, keyPath string) {
 		Addr:      ipAddr + ":" + port,
 		TLSConfig: tlsConfig,
 	}
+	fmt.Println("Starting server at : ", ipAddr, port)
 
 	// Listen to HTTPS connections with the server certificate and wait
 	log.Fatal(server.ListenAndServeTLS(crtPath, keyPath))

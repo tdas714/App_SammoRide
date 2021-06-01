@@ -9,3 +9,6 @@ Send signal that it is active
 
 ATTENTIONS:
 If every node is verified by root ca , ordering service can run without consent using root ca. Find a way to revoke cetificte
+
+
+Rider anounces the the availability, travaler sends the request to rider, rider signs the contract and sends that to travaler, travaler signs the same contract and sends that to ordering service, ordering service verify signatures,. sends that to random endorsing peers, endorsing peers runs the smart-Contract sends the trasaction, ordering service takes the transaction , combines with bunch of other transaction(an specific size) makes a block and append that to the chain, updates the world-state and distributes that to endorsing peers.

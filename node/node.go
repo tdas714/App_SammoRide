@@ -1,4 +1,4 @@
-package main
+package node
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ func (node *Node) JoinNetwork() {
 		node.Info.Country, node.Info.Name, node.Info.Province,
 		node.Info.City)
 
-	client.StartPeerServer(node.Info.IP, node.Info.Port, "CAs/interCa.crt",
+	client.StartPeerServer(node.Info.Name, node.Info.IP, node.Info.Port, "CAs/interCa.crt",
 		cPath, kPath)
 	fmt.Println("Server Listing in port: ", node.Info.Port)
 }
