@@ -7,12 +7,10 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	yaml "gopkg.in/yaml.v3"
 )
@@ -66,7 +64,7 @@ func SendEnrollRequest(country, name, province, city, postC,
 	err = ioutil.WriteFile("CAs/rootCa.crt", res.RootCert, 0700)
 	CheckErr(err, "SendErollReq/rootca")
 
-	SavePeerList("database/"+name, res.PeerList)
+	SavePeerList("database", name, res.PeerList)
 
 	blocks, _ := pem.Decode(res.PeerCert)
 	if blocks == nil {
@@ -120,21 +118,16 @@ func createClientConfig(ca, crt, key string) (*tls.Config, error) {
 	}, nil
 }
 
-func gossipHandler(w http.ResponseWriter, r *http.Request, name string) {
-	bodyBytes, err := ioutil.ReadAll(r.Body)
-	CheckErr(err, "gossipRequest")
-	SavePeerList("database/"+name, []string{string(bodyBytes)})
-	// Write "Hello, world!" to the response body
-	fmt.Println("Gossip from: ", r.RemoteAddr)
-	io.WriteString(w, "Lets gossip!\n")
-}
-
 func StartPeerServer(name, ipAddr, port, caPath, crtPath, keyPath string) {
 
 	// Set up a /hello resource handler
 	http.HandleFunc("/gossip", func(rw http.ResponseWriter, r *http.Request) {
-		gossipHandler(rw, r, name)
+		GossipHandler(rw, r, name)
 	}) //This can be diffrent for diffrent data types
+
+	http.HandleFunc("Announcement/rider", func(rw http.ResponseWriter, r *http.Request) {
+		RiderAHandler(rw, r, name)
+	})
 
 	tlsConfig, err := createClientConfig(caPath, crtPath, keyPath)
 	CheckErr(err, "StartOrederServer/config")
@@ -150,12 +143,8 @@ func StartPeerServer(name, ipAddr, port, caPath, crtPath, keyPath string) {
 
 }
 
-func SendData(addr, ca, crt, key, ipAddr, port,
+func SendData(ca, crt, key, ipAddr, port,
 	reqSubDomain string, data []byte) {
-	// addr := *connect
-	if !strings.Contains(addr, ":") {
-		addr += ":8443"
-	}
 
 	// Read the key pair to create certificate
 	cert, err := tls.LoadX509KeyPair(crt, key)

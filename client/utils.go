@@ -38,6 +38,13 @@ type PeerEnrollDataResponse struct {
 	PeerList   []string
 }
 
+type RiderAnnouncement struct {
+	Latitude    string
+	Longitude   string
+	Avalability string
+	Info        *ClientInfo
+}
+
 func GetIP() string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -112,4 +119,27 @@ func fileExists(filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+func (ra *RiderAnnouncement) RASerialize() []byte {
+	var res bytes.Buffer
+	encoder := gob.NewEncoder(&res)
+
+	err := encoder.Encode(ra)
+
+	CheckErr(err, "RAS/encode")
+
+	return res.Bytes()
+}
+
+func RADeserialize(data []byte) *RiderAnnouncement {
+	var riderA RiderAnnouncement
+
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+
+	err := decoder.Decode(&riderA)
+
+	CheckErr(err, "RAD/decode")
+
+	return &riderA
 }

@@ -38,9 +38,11 @@ func main() {
 			node.CreateNode()
 		} else if strings.Contains(in, ":") {
 			splited := strings.Split(in, ":")
-			client.SendData(node.Info.IP, "CAs/rootCa.crt",
+			client.SendData("CAs/rootCa.crt",
 				cPath, kPath, "127.0.0.1", splited[1], "gossip", []byte(node.Info.IP+":"+node.Info.Port))
 
+		} else if strings.Contains(in, "annon") {
+			node.AnnounceAvailability()
 		}
 	}
 
