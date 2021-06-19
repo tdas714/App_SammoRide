@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	yaml "gopkg.in/yaml.v3"
 )
@@ -23,20 +25,20 @@ type ClientInfo struct {
 	IP         string `yaml:"IP"`
 	Postalcode string `yaml:"PostalCode"`
 	Port       string `yaml:"Port"`
+	PublicKey  *ecdsa.PublicKey
 }
 
-func (c *ClientInfo) GetConf(filename string) *ClientInfo {
+func (c *ClientInfo) GetConf(filename string) {
 
 	yamlFile, err := ioutil.ReadFile(filename)
 	CheckErr(err, "YamlFile Get")
 	err = yaml.Unmarshal(yamlFile, c)
 	CheckErr(err, " Unmarshal Error")
 
-	return c
 }
 
 func SendEnrollRequest(country, name, province, city, postC,
-	ipAddr, lPort, serverIp, serverPort string) {
+	ipAddr, lPort, serverIp, serverPort string) []string {
 	enrollReq := &PeerEnrollDataRequest{Country: country, Name: name, Province: province, IpAddr: ipAddr,
 		City: city, PostalCode: postC, ListingPort: lPort}
 	json_data, err := json.Marshal(enrollReq)
@@ -64,8 +66,6 @@ func SendEnrollRequest(country, name, province, city, postC,
 	err = ioutil.WriteFile("CAs/rootCa.crt", res.RootCert, 0700)
 	CheckErr(err, "SendErollReq/rootca")
 
-	SavePeerList("database", name, res.PeerList)
-
 	blocks, _ := pem.Decode(res.PeerCert)
 	if blocks == nil {
 		log.Panic("Block is nil")
@@ -92,17 +92,29 @@ func SendEnrollRequest(country, name, province, city, postC,
 		log.Fatalf("Error closing key.pem: %v", err)
 	}
 	log.Print("wrote key.pem\n")
+
+	return res.PeerList
 }
 
 // ====================================
-func createClientConfig(ca, crt, key string) (*tls.Config, error) {
+func createClientConfig(rca, ca, crt, key string) (*tls.Config, error) {
 	caCertPEM, err := ioutil.ReadFile(ca)
+	if err != nil {
+		return nil, err
+	}
+
+	rcaCertPem, err := ioutil.ReadFile(rca)
 	if err != nil {
 		return nil, err
 	}
 
 	roots := x509.NewCertPool()
 	ok := roots.AppendCertsFromPEM(caCertPEM)
+	if !ok {
+		panic("failed to parse root certificate")
+	}
+
+	ok = roots.AppendCertsFromPEM(rcaCertPem)
 	if !ok {
 		panic("failed to parse root certificate")
 	}
@@ -118,25 +130,26 @@ func createClientConfig(ca, crt, key string) (*tls.Config, error) {
 	}, nil
 }
 
-func StartPeerServer(name, ipAddr, port, caPath, crtPath, keyPath string) {
+func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
+	c *ClientInfo, GossipData []string) {
 
 	// Set up a /hello resource handler
 	http.HandleFunc("/gossip", func(rw http.ResponseWriter, r *http.Request) {
-		GossipHandler(rw, r, name)
+		GossipHandler(rw, r, c.Name)
 	}) //This can be diffrent for diffrent data types
 
-	http.HandleFunc("Announcement/rider", func(rw http.ResponseWriter, r *http.Request) {
-		RiderAHandler(rw, r, name)
+	http.HandleFunc("/Announcement/rider", func(rw http.ResponseWriter, r *http.Request) {
+		GossipData = RiderAHandler(rw, r, c, GossipData)
 	})
 
-	tlsConfig, err := createClientConfig(caPath, crtPath, keyPath)
+	tlsConfig, err := createClientConfig(rcaPath, caPath, crtPath, keyPath)
 	CheckErr(err, "StartOrederServer/config")
 
 	server := &http.Server{
-		Addr:      ipAddr + ":" + port,
+		Addr:      c.IP + ":" + c.Port,
 		TLSConfig: tlsConfig,
 	}
-	fmt.Println("Starting server at : ", ipAddr, port)
+	fmt.Println("Starting server at : ", c.IP, c.Port)
 
 	// Listen to HTTPS connections with the server certificate and wait
 	log.Fatal(server.ListenAndServeTLS(crtPath, keyPath))
@@ -144,7 +157,7 @@ func StartPeerServer(name, ipAddr, port, caPath, crtPath, keyPath string) {
 }
 
 func SendData(ca, crt, key, ipAddr, port,
-	reqSubDomain string, data []byte) {
+	reqSubDomain string, data []byte, timeout int) []byte {
 
 	// Read the key pair to create certificate
 	cert, err := tls.LoadX509KeyPair(crt, key)
@@ -160,6 +173,7 @@ func SendData(ca, crt, key, ipAddr, port,
 
 	// Create a HTTPS client and supply the created CA pool and certificate
 	client := &http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				RootCAs:            caCertPool,
@@ -177,7 +191,9 @@ func SendData(ca, crt, key, ipAddr, port,
 	url := fmt.Sprintf("https://%s:%s/%s", ipAddr,
 		port, reqSubDomain)
 	r, err := client.Post(url, "application/json", bytes.NewBuffer(data))
-
+	if err != nil {
+		fmt.Println("Timeout Exceeds")
+	}
 	// Read the response body
 	defer r.Body.Close()
 	body, err := ioutil.ReadAll(r.Body)
@@ -187,4 +203,5 @@ func SendData(ca, crt, key, ipAddr, port,
 
 	// Print the response body to stdout
 	fmt.Printf("%s\n", body)
+	return body
 }

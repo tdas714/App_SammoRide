@@ -7,9 +7,12 @@ import (
 	"encoding/gob"
 	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"os"
+	"time"
 	"unsafe"
 )
 
@@ -142,4 +145,64 @@ func RADeserialize(data []byte) *RiderAnnouncement {
 	CheckErr(err, "RAD/decode")
 
 	return &riderA
+}
+
+type Connections struct {
+	Path     string
+	PeerList []string
+}
+
+func LoadConnections(path string) *Connections {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return &Connections{Path: path}
+	}
+	return ConnDeserialize(content)
+}
+
+func ConnDeserialize(data []byte) *Connections {
+	var conn Connections
+
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+
+	err := decoder.Decode(&conn)
+
+	CheckErr(err, "Conn/decode")
+
+	return &conn
+}
+
+func (c *Connections) Add(pLIst []string) {
+	c.PeerList = append(c.PeerList, pLIst...)
+}
+
+func (c *Connections) len() int {
+	return len(c.PeerList)
+}
+
+func (c *Connections) GetRandom(num int) []string {
+	var gList []string
+	var selectedPeer string
+	for i := 1; i >= c.len(); i++ {
+		rand.Seed(time.Now().Unix())
+		selectedPeer = c.PeerList[rand.Intn(c.len())]
+		gList = append(gList, selectedPeer)
+	}
+	return gList
+}
+
+func (c *Connections) Close() {
+	bytes, err := GetBytes(c)
+	CheckErr(err, "GetBytes/C.Close")
+	err = ioutil.WriteFile(c.Path, bytes, 0700)
+	CheckErr(err, "Write/C.Close")
+}
+
+func Contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }

@@ -39,7 +39,8 @@ func main() {
 		} else if strings.Contains(in, ":") {
 			splited := strings.Split(in, ":")
 			client.SendData("CAs/rootCa.crt",
-				cPath, kPath, "127.0.0.1", splited[1], "gossip", []byte(node.Info.IP+":"+node.Info.Port))
+				cPath, kPath, "127.0.0.1", splited[1], "gossip",
+				[]byte(node.Info.IP+":"+node.Info.Port), 10)
 
 		} else if strings.Contains(in, "annon") {
 			node.AnnounceAvailability()
