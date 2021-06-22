@@ -6,14 +6,14 @@ import (
 	"strings"
 
 	"github.com/App-SammoRide/client"
-	"github.com/App-SammoRide/node"
+	// "github.com/App-SammoRide/node"
 )
 
 func main() {
 	InputYml := flag.String("in", "InputFile", "InfoFile")
 	flag.Parse()
 
-	node := node.NewNode(*InputYml)
+	node := client.NewNode(*InputYml, "ClientDatabase")
 
 	fmt.Println(node.Info.City, node.Info.Country, node.Info.Name)
 	// client.SendEnrollRequest(node.Info.Country, node.Info.Name,

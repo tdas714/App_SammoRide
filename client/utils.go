@@ -5,13 +5,16 @@ import (
 	"crypto/ecdsa"
 	"crypto/x509"
 	"encoding/gob"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
 	"os"
+	"strings"
 	"time"
 	"unsafe"
 )
@@ -42,6 +45,7 @@ type PeerEnrollDataResponse struct {
 }
 
 type RiderAnnouncement struct {
+	Header      int64
 	Latitude    string
 	Longitude   string
 	Avalability string
@@ -117,34 +121,35 @@ func ByteArrayToInt(arr []byte) int64 {
 }
 
 func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
+	_, err := os.Stat(filename)
 	if os.IsNotExist(err) {
 		return false
 	}
-	return !info.IsDir()
+
+	return true
+}
+
+func CreateDirIfNotExist(dir string) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		err = os.MkdirAll(dir, 0755)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func (ra *RiderAnnouncement) RASerialize() []byte {
-	var res bytes.Buffer
-	encoder := gob.NewEncoder(&res)
-
-	err := encoder.Encode(ra)
-
+	js, err := json.Marshal(ra)
 	CheckErr(err, "RAS/encode")
 
-	return res.Bytes()
+	return js
 }
 
-func RADeserialize(data []byte) *RiderAnnouncement {
-	var riderA RiderAnnouncement
+func RADeserialize(data io.Reader) *RiderAnnouncement {
+	var riderA *RiderAnnouncement
+	json.NewDecoder(data).Decode(&riderA)
 
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-
-	err := decoder.Decode(&riderA)
-
-	CheckErr(err, "RAD/decode")
-
-	return &riderA
+	return riderA
 }
 
 type Connections struct {
@@ -173,7 +178,15 @@ func ConnDeserialize(data []byte) *Connections {
 }
 
 func (c *Connections) Add(pLIst []string) {
-	c.PeerList = append(c.PeerList, pLIst...)
+	for _, p := range pLIst {
+		if !Contains(c.PeerList, p) {
+			if !strings.Contains(p, ":") {
+				p += ":8443"
+			}
+			c.PeerList = append(c.PeerList, p)
+		}
+
+	}
 }
 
 func (c *Connections) len() int {
@@ -183,7 +196,8 @@ func (c *Connections) len() int {
 func (c *Connections) GetRandom(num int) []string {
 	var gList []string
 	var selectedPeer string
-	for i := 1; i >= c.len(); i++ {
+
+	for i := 1; i <= c.len(); i++ {
 		rand.Seed(time.Now().Unix())
 		selectedPeer = c.PeerList[rand.Intn(c.len())]
 		gList = append(gList, selectedPeer)

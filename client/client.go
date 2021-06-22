@@ -131,25 +131,33 @@ func createClientConfig(rca, ca, crt, key string) (*tls.Config, error) {
 }
 
 func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
-	c *ClientInfo, GossipData []string) {
+	node *Node) {
 
-	// Set up a /hello resource handler
-	http.HandleFunc("/gossip", func(rw http.ResponseWriter, r *http.Request) {
-		GossipHandler(rw, r, c.Name)
-	}) //This can be diffrent for diffrent data types
+	arrivalTime := "10"
+	rideFair := 10.5
+	// // Set up a /hello resource handler
+	// http.HandleFunc("/gossip", func(rw http.ResponseWriter, r *http.Request) {
+	// 	GossipHandler(rw, r, node.Info.Name)
+	// }) //This can be diffrent for diffrent data types
+
+	defer node.Connection.Close()
 
 	http.HandleFunc("/Announcement/rider", func(rw http.ResponseWriter, r *http.Request) {
-		GossipData = RiderAHandler(rw, r, c, GossipData)
+		RiderAHandler(rw, r, node)
+	})
+
+	http.HandleFunc("OrderProposal/Rider", func(rw http.ResponseWriter, r *http.Request) {
+		RiderOrderProposalHandler(rw, r, arrivalTime, float32(rideFair), node)
 	})
 
 	tlsConfig, err := createClientConfig(rcaPath, caPath, crtPath, keyPath)
 	CheckErr(err, "StartOrederServer/config")
 
 	server := &http.Server{
-		Addr:      c.IP + ":" + c.Port,
+		Addr:      node.Info.IP + ":" + node.Info.Port,
 		TLSConfig: tlsConfig,
 	}
-	fmt.Println("Starting server at : ", c.IP, c.Port)
+	fmt.Println("Starting server at : ", node.Info.IP, node.Info.Port)
 
 	// Listen to HTTPS connections with the server certificate and wait
 	log.Fatal(server.ListenAndServeTLS(crtPath, keyPath))
@@ -190,18 +198,22 @@ func SendData(ca, crt, key, ipAddr, port,
 	// =======POST
 	url := fmt.Sprintf("https://%s:%s/%s", ipAddr,
 		port, reqSubDomain)
+
 	r, err := client.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		fmt.Println("Timeout Exceeds")
-	}
-	// Read the response body
-	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
+		return []byte{}
+	} else {
 
-	// Print the response body to stdout
-	fmt.Printf("%s\n", body)
-	return body
+		// Read the response body
+		defer r.Body.Close()
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Print the response body to stdout
+		fmt.Printf("%s\n", body)
+		return body
+	}
 }
