@@ -36,12 +36,19 @@ func main() {
 			go node.JoinNetwork()
 		} else if strings.Contains(in, "enroll") {
 			node.CreateNode()
-		} else if strings.Contains(in, "1-2-3") {
-			// splited := strings.Split(in, ":")
-			// client.SendData("CAs/rootCa.crt",
-			// 	cPath, kPath, "127.0.0.1", splited[1], "gossip",
-			// 	[]byte(node.Info.IP+":"+node.Info.Port), 10)
-			fmt.Println("Received Number")
+		} else if client.Contains([]string{"1", "2", "3"}, in) {
+			var c client.ClientInfo
+			if in == "1" {
+				c.GetConf("ClientInfo/client_1.yml")
+			} else if in == "2" {
+				c.GetConf("ClientInfo/client_2.yml")
+			} else if in == "3" {
+				c.GetConf("ClientInfo/client_3.yml")
+			} else {
+				continue
+			}
+
+			node.RiderSendProposal(c)
 		} else if strings.Contains(in, "annon") {
 			node.AnnounceAvailability()
 		}
