@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 )
 
@@ -29,38 +30,35 @@ func RiderAHandler(w http.ResponseWriter, r *http.Request,
 
 }
 
-// Handles proposal from rider
-func RiderOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
+// Handles proposal from traveler
+func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 	arriveTime string, rideFair float32, node *Node) {
-
-	// kPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.key",
-	// 	node.Info.Country, node.Info.Name, node.Info.Province,
-	// 	node.Info.City)
 
 	keyPem, err := ioutil.ReadFile(node.KeyPath)
 	CheckErr(err, "orderProposalHandler")
 
-	node.Info.PublicKey = nil
-
 	contract := ContractDeserialize(resp.Body)
 
 	fmt.Println("Received Rider Order Proposal from: ",
-		contract.Driver.IP+":"+contract.Driver.Port)
+		contract.Traveler.IP+":"+contract.Traveler.Port)
 
-	node.Connection.Add([]string{contract.Driver.IP + ":" + contract.Driver.Port})
+	node.Connection.Add([]string{contract.Traveler.IP + ":" + contract.Traveler.Port})
 
 	contract.Driver = node.Info
 	contract.RideFair = rideFair
 	contract.ArrivalTime = arriveTime
 	contract.TravelerSig = nil
 	contract.DriverSig = nil
+	node.Info.PublicKey = Keyencode(&LoadPrivateKey(keyPem).PublicKey)
+	contract.Driver = node.Info
 
 	hash := sha256.Sum256(contract.ContractSerialize())
 	r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash[:])
 
-	node.Info.PublicKey = &LoadPrivateKey(keyPem).PublicKey
-	contract.DriverSig = &Sig{r, s}
+	contract.DriverSig = []big.Int{*r, *s}
+
+	fmt.Println(contract)
 	w.Write(contract.ContractSerialize())
 
-	// Have to add gossip
+	// HAVE TO ADD GOSSIP HERE <<<<<<===============
 }

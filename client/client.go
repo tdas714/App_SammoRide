@@ -2,7 +2,6 @@ package client
 
 import (
 	"bytes"
-	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -25,7 +24,7 @@ type ClientInfo struct {
 	IP         string `yaml:"IP"`
 	Postalcode string `yaml:"PostalCode"`
 	Port       string `yaml:"Port"`
-	PublicKey  *ecdsa.PublicKey
+	PublicKey  string
 }
 
 func (c *ClientInfo) GetConf(filename string) {
@@ -146,8 +145,8 @@ func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
 		RiderAHandler(rw, r, node)
 	})
 
-	http.HandleFunc("OrderProposal/Rider", func(rw http.ResponseWriter, r *http.Request) {
-		RiderOrderProposalHandler(rw, r, arrivalTime, float32(rideFair), node)
+	http.HandleFunc("/OrderProposal/Traveler", func(rw http.ResponseWriter, r *http.Request) {
+		TravelerOrderProposalHandler(rw, r, arrivalTime, float32(rideFair), node)
 	})
 
 	tlsConfig, err := createClientConfig(rcaPath, caPath, crtPath, keyPath)

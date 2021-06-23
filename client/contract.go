@@ -1,6 +1,8 @@
 package client
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"io"
 	"math/big"
@@ -10,11 +12,11 @@ type OrderContract struct {
 	PickupLoc   string
 	DestLoc     string
 	Traveler    *ClientInfo
-	TravelerSig []byte
+	TravelerSig []big.Int
 	RideFair    float32
 	ArrivalTime string
 	Driver      *ClientInfo
-	DriverSig   *Sig
+	DriverSig   []big.Int
 }
 
 type Sig struct {
@@ -34,4 +36,16 @@ func ContractDeserialize(data io.Reader) *OrderContract {
 	json.NewDecoder(data).Decode(&order)
 
 	return order
+}
+
+func ContractFromBytes(data []byte) *OrderContract {
+	var gData OrderContract
+
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+
+	err := decoder.Decode(&gData)
+
+	CheckErr(err, "RAD/decode")
+
+	return &gData
 }

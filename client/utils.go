@@ -228,3 +228,19 @@ func Contains(s []string, e string) bool {
 	}
 	return false
 }
+
+func Keyencode(publicKey *ecdsa.PublicKey) string {
+	x509EncodedPub, _ := x509.MarshalPKIXPublicKey(publicKey)
+	pemEncodedPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: x509EncodedPub})
+	return string(pemEncodedPub)
+}
+
+func Keydecode(pemEncodedPub string) *ecdsa.PublicKey {
+
+	blockPub, _ := pem.Decode([]byte(pemEncodedPub))
+	x509EncodedPub := blockPub.Bytes
+	genericPublicKey, _ := x509.ParsePKIXPublicKey(x509EncodedPub)
+	publicKey := genericPublicKey.(*ecdsa.PublicKey)
+
+	return publicKey
+}

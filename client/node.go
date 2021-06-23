@@ -2,7 +2,12 @@ package client
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
+	"io/ioutil"
+	"math/big"
 	"strings"
 	"time"
 	// "github.com/App-SammoRide/client"
@@ -73,19 +78,52 @@ func (node *Node) AnnounceAvailability() {
 
 }
 
-func (node *Node) RiderSendProposal(c ClientInfo) {
+func (node *Node) SendProposalToRider(c ClientInfo, loc, des string) {
 
 	node.Connection.Add([]string{c.IP})
 
+	keyPem, err := ioutil.ReadFile(node.KeyPath)
+	CheckErr(err, "orderProposalHandler")
+
 	orderProp := OrderContract{PickupLoc: "Currect Loc",
 		DestLoc: "Destination Loc", Traveler: node.Info}
+
+	fmt.Println("Sendin proposal to: ", c.IP+":"+c.Port)
 	// Have to get response
 	resp := SendData("CAs/rootCa.crt",
 		node.Certificatepath, node.KeyPath, c.IP, c.Port,
-		"OrderProposal/Rider", orderProp.ContractSerialize(), 10) // This will be real contract
+		"OrderProposal/Traveler", orderProp.ContractSerialize(), 10) // This will be real contract
+	// HTTP response mto structure
+	// respString := fmt.Sprintf("%s", resp)
+	contract := ContractDeserialize(bytes.NewBuffer(resp))
+	demoContract := *contract
+	demoContract.DriverSig = nil
+	h := hash(demoContract.ContractSerialize())[:]
+	publicKey := Keydecode(contract.Driver.PublicKey)
+	// fmt.Println(contract.Driver.PublicKey, h,
+	// 	&contract.DriverSig[0], &contract.DriverSig[1])
 
-	fmt.Println(ContractDeserialize(bytes.NewBuffer(resp)))
-	// have to use this contract
+	verify := ecdsa.Verify(publicKey, h,
+		&contract.DriverSig[0], &contract.DriverSig[1])
+
+	if verify {
+		contract.PickupLoc = loc
+		contract.DestLoc = des
+		node.Info.PublicKey = Keyencode(&LoadPrivateKey(keyPem).PublicKey)
+		contract.Traveler = node.Info
+		contract.TravelerSig = nil
+
+		hash := sha256.Sum256(contract.ContractSerialize())
+		r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash[:])
+		CheckErr(err, "SendriderProposal/Sig")
+
+		contract.TravelerSig = []big.Int{*r, *s}
+
+		SendData("CAs/rootCa.crt",
+			node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
+			"OrderContract", contract.ContractSerialize(), 2)
+	}
+
 }
 
 func (node *Node) Gossip(header int64, num int, data []byte, ipAddr, domain string) {
@@ -103,4 +141,12 @@ func (node *Node) Gossip(header int64, num int, data []byte, ipAddr, domain stri
 		}
 		node.GossipSentList[header] = ipAddr
 	}
+}
+
+func hash(b []byte) []byte {
+	h := sha256.New()
+	// hash the body bytes
+	h.Write(b)
+	// compute the SHA256 hash
+	return h.Sum(nil)
 }

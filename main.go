@@ -47,8 +47,10 @@ func main() {
 			} else {
 				continue
 			}
-
-			node.RiderSendProposal(c)
+			if node.Info.Port == c.Port {
+				continue
+			}
+			node.SendProposalToRider(c, "Here", "There")
 		} else if strings.Contains(in, "annon") {
 			node.AnnounceAvailability()
 		}
