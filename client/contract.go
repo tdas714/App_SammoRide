@@ -1,8 +1,8 @@
 package client
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/json"
+	"io"
 	"math/big"
 )
 
@@ -23,24 +23,15 @@ type Sig struct {
 }
 
 func (ra *OrderContract) ContractSerialize() []byte {
-	var res bytes.Buffer
-	encoder := gob.NewEncoder(&res)
-
-	err := encoder.Encode(ra)
-
+	js, err := json.Marshal(ra)
 	CheckErr(err, "ContactSer/encode")
 
-	return res.Bytes()
+	return js
 }
 
-func ContractDeserialize(data []byte) *OrderContract {
-	var order OrderContract
+func ContractDeserialize(data io.Reader) *OrderContract {
+	var order *OrderContract
+	json.NewDecoder(data).Decode(&order)
 
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-
-	err := decoder.Decode(&order)
-
-	CheckErr(err, "RAD/decode")
-
-	return &order
+	return order
 }

@@ -196,11 +196,19 @@ func (c *Connections) len() int {
 func (c *Connections) GetRandom(num int) []string {
 	var gList []string
 	var selectedPeer string
+	// Make sure there are two diffrent ips, not source
+	i := 1
 
-	for i := 1; i <= c.len(); i++ {
-		rand.Seed(time.Now().Unix())
-		selectedPeer = c.PeerList[rand.Intn(c.len())]
-		gList = append(gList, selectedPeer)
+	for {
+		rand.Seed(int64(i) + time.Now().Unix())
+		selectedPeer = c.PeerList[rand.Intn(len(c.PeerList))]
+		if !Contains(gList, selectedPeer) {
+			gList = append(gList, selectedPeer)
+		}
+		if len(gList) >= num || i >= c.len() {
+			break
+		}
+		i++
 	}
 	return gList
 }

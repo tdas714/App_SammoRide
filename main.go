@@ -19,12 +19,12 @@ func main() {
 	// client.SendEnrollRequest(node.Info.Country, node.Info.Name,
 	// 	node.Info.Province, node.Info.City, node.Info.Postalcode, client.GetIP())
 
-	cPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.crt",
-		node.Info.Country, node.Info.Name, node.Info.Province,
-		node.Info.City)
-	kPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.key",
-		node.Info.Country, node.Info.Name, node.Info.Province,
-		node.Info.City)
+	// cPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.crt",
+	// 	node.Info.Country, node.Info.Name, node.Info.Province,
+	// 	node.Info.City)
+	// kPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.key",
+	// 	node.Info.Country, node.Info.Name, node.Info.Province,
+	// 	node.Info.City)
 
 	// node.CreateNode()
 
@@ -36,12 +36,12 @@ func main() {
 			go node.JoinNetwork()
 		} else if strings.Contains(in, "enroll") {
 			node.CreateNode()
-		} else if strings.Contains(in, ":") {
-			splited := strings.Split(in, ":")
-			client.SendData("CAs/rootCa.crt",
-				cPath, kPath, "127.0.0.1", splited[1], "gossip",
-				[]byte(node.Info.IP+":"+node.Info.Port), 10)
-
+		} else if strings.Contains(in, "1-2-3") {
+			// splited := strings.Split(in, ":")
+			// client.SendData("CAs/rootCa.crt",
+			// 	cPath, kPath, "127.0.0.1", splited[1], "gossip",
+			// 	[]byte(node.Info.IP+":"+node.Info.Port), 10)
+			fmt.Println("Received Number")
 		} else if strings.Contains(in, "annon") {
 			node.AnnounceAvailability()
 		}
