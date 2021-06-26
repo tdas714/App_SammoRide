@@ -32,7 +32,7 @@ func VerifyOrderer(rootCa, ordererCa []byte) {
 	log.Print("Orderer Verified")
 }
 
-func VerifyPeer(rootCa, ordererCa, peerCa, priv []byte) {
+func VerifyPeer(rootCa, ordererCa, peerCa []byte) {
 	roots := x509.NewCertPool()
 	ok := roots.AppendCertsFromPEM([]byte(rootCa))
 	if !ok {

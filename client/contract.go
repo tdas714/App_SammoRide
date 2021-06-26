@@ -6,17 +6,32 @@ import (
 	"encoding/json"
 	"io"
 	"math/big"
+	"time"
 )
 
-type OrderContract struct {
-	PickupLoc   string
-	DestLoc     string
-	Traveler    *ClientInfo
-	TravelerSig []big.Int
-	RideFair    float32
-	ArrivalTime string
-	Driver      *ClientInfo
-	DriverSig   []big.Int
+var (
+	StartRide = byte(0x01)
+	StopRide  = byte(0x02)
+	Dispute   = byte(0x03)
+)
+
+type TransactionProposal struct {
+	TimeStamp    time.Time
+	Type         byte
+	PickupLoc    string
+	DestLoc      string
+	Traveler     *ClientInfo
+	TravelerSig  []big.Int
+	RideFair     float32
+	ArrivalTime  string
+	Driver       *ClientInfo
+	DriverSig    []big.Int
+	DriverCert   []byte
+	TravelerCert []byte
+}
+
+type TransactionProposalResponse struct {
+	Msg string
 }
 
 type Sig struct {
@@ -24,28 +39,42 @@ type Sig struct {
 	s *big.Int
 }
 
-func (ra *OrderContract) ContractSerialize() []byte {
+func (ra *TransactionProposal) ContractSerialize() []byte {
 	js, err := json.Marshal(ra)
 	CheckErr(err, "ContactSer/encode")
 
 	return js
 }
 
-func ContractDeserialize(data io.Reader) *OrderContract {
-	var order *OrderContract
-	json.NewDecoder(data).Decode(&order)
+func (ra *TransactionProposalResponse) TransResSerialize() []byte {
+	js, err := json.Marshal(ra)
+	CheckErr(err, "ContactSer/encode")
 
-	return order
+	return js
 }
 
-func ContractFromBytes(data []byte) *OrderContract {
-	var gData OrderContract
+func TransResDeserialize(data io.Reader) *TransactionProposalResponse {
+	var txPropRes *TransactionProposalResponse
+	json.NewDecoder(data).Decode(&txPropRes)
+
+	return txPropRes
+}
+
+func ContractDeserialize(data io.Reader) *TransactionProposal {
+	var txProp *TransactionProposal
+	json.NewDecoder(data).Decode(&txProp)
+
+	return txProp
+}
+
+func ContractFromBytes(data []byte) *TransactionProposal {
+	var gData TransactionProposal
 
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 
 	err := decoder.Decode(&gData)
 
-	CheckErr(err, "RAD/decode")
+	CheckErr(err, "ContractDS/decode")
 
 	return &gData
 }

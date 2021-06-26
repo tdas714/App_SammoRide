@@ -10,15 +10,20 @@ import (
 	"math/big"
 	"strings"
 	"time"
+
+	"github.com/App-SammoRide/policy"
 	// "github.com/App-SammoRide/client"
 )
 
 type Node struct {
-	Info            *ClientInfo
-	Connection      *Connections
-	Certificatepath string
-	KeyPath         string
-	GossipSentList  map[int64]string
+	Info             *ClientInfo
+	Connection       *Connections
+	RootCertificate  []byte
+	Certificatepath  string
+	KeyPath          string
+	GossipSentList   map[int64]string
+	EndorsmentPolicy *policy.EndorsmentPolicy
+	WritersPolicy    *policy.WritersPolicy
 }
 
 func NewNode(InputYml, dir string) *Node {
@@ -39,8 +44,14 @@ func NewNode(InputYml, dir string) *Node {
 		c.City)
 	gSL := make(map[int64]string)
 	gSL[time.Now().Unix()] = "Orderer"
+
+	rootca, err := ioutil.ReadFile("CAs/rootCa.crt")
+	CheckErr(err, "Node/RootCa")
+
+	endors := policy.GetEndorsmentPolicy()
+	writers := policy.GetWritersPolicy()
 	node := Node{Info: &c, Connection: conn, Certificatepath: cPath, KeyPath: kPath,
-		GossipSentList: gSL}
+		GossipSentList: gSL, EndorsmentPolicy: endors, WritersPolicy: writers, RootCertificate: rootca}
 	return &node
 }
 
@@ -85,8 +96,11 @@ func (node *Node) SendProposalToRider(c ClientInfo, loc, des string) {
 	keyPem, err := ioutil.ReadFile(node.KeyPath)
 	CheckErr(err, "orderProposalHandler")
 
-	orderProp := OrderContract{PickupLoc: "Currect Loc",
-		DestLoc: "Destination Loc", Traveler: node.Info}
+	certPem, err := ioutil.ReadFile(node.Certificatepath)
+	CheckErr(err, "Test")
+
+	orderProp := TransactionProposal{PickupLoc: "Currect Loc",
+		DestLoc: "Destination Loc", Traveler: node.Info, TravelerCert: certPem}
 
 	fmt.Println("Sendin proposal to: ", c.IP+":"+c.Port)
 	// Have to get response
@@ -95,33 +109,48 @@ func (node *Node) SendProposalToRider(c ClientInfo, loc, des string) {
 		"OrderProposal/Traveler", orderProp.ContractSerialize(), 10) // This will be real contract
 	// HTTP response mto structure
 	// respString := fmt.Sprintf("%s", resp)
-	contract := ContractDeserialize(bytes.NewBuffer(resp))
-	demoContract := *contract
+	transProp := ContractDeserialize(bytes.NewBuffer(resp))
+	demoContract := *transProp
 	demoContract.DriverSig = nil
 	h := hash(demoContract.ContractSerialize())[:]
-	publicKey := Keydecode(contract.Driver.PublicKey)
+	publicKey := Keydecode(transProp.Driver.PublicKey)
 	// fmt.Println(contract.Driver.PublicKey, h,
 	// 	&contract.DriverSig[0], &contract.DriverSig[1])
 
 	verify := ecdsa.Verify(publicKey, h,
-		&contract.DriverSig[0], &contract.DriverSig[1])
+		&transProp.DriverSig[0], &transProp.DriverSig[1])
 
 	if verify {
-		contract.PickupLoc = loc
-		contract.DestLoc = des
+		transProp.PickupLoc = loc
+		transProp.DestLoc = des
 		node.Info.PublicKey = Keyencode(&LoadPrivateKey(keyPem).PublicKey)
-		contract.Traveler = node.Info
-		contract.TravelerSig = nil
+		transProp.Traveler = node.Info
+		transProp.TravelerSig = nil
+		transProp.Type = StartRide
+		transProp.TimeStamp = time.Now()
 
-		hash := sha256.Sum256(contract.ContractSerialize())
+		hash := sha256.Sum256(transProp.ContractSerialize())
 		r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash[:])
 		CheckErr(err, "SendriderProposal/Sig")
 
-		contract.TravelerSig = []big.Int{*r, *s}
+		transProp.TravelerSig = []big.Int{*r, *s}
 
-		SendData("CAs/rootCa.crt",
-			node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
-			"OrderContract", contract.ContractSerialize(), 2)
+		if node.Connection.len() >= node.EndorsmentPolicy.NumberOfEndorsers {
+			var splited []string
+			endorsList := node.Connection.GetRandom(node.EndorsmentPolicy.NumberOfEndorsers)
+			for _, endor := range endorsList {
+				splited = strings.Split(endor, ":")
+
+				SendData("CAs/interCa.crt", node.Certificatepath, node.KeyPath,
+					splited[0], splited[1], "Transaction/Proposal", transProp.ContractSerialize(),
+					3)
+			}
+		} else {
+			SendData("CAs/rootCa.crt",
+				node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
+				"Transaction/Proposal", transProp.ContractSerialize(), 2)
+		}
+
 	}
 
 }

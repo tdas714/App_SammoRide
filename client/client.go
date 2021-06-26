@@ -54,7 +54,7 @@ func SendEnrollRequest(country, name, province, city, postC,
 	var res *PeerEnrollDataResponse
 	json.NewDecoder(resp.Body).Decode(&res)
 
-	VerifyPeer(res.RootCert, res.SenderCert, res.PeerCert, res.PrivateKey)
+	VerifyPeer(res.RootCert, res.SenderCert, res.PeerCert)
 	VerifyOrderer(res.RootCert, res.SenderCert)
 	//
 	_ = os.Mkdir("PeerCerts", 0700)
@@ -147,6 +147,10 @@ func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
 
 	http.HandleFunc("/OrderProposal/Traveler", func(rw http.ResponseWriter, r *http.Request) {
 		TravelerOrderProposalHandler(rw, r, arrivalTime, float32(rideFair), node)
+	})
+
+	http.HandleFunc("/Transaction/Proposal", func(rw http.ResponseWriter, r *http.Request) {
+		TransactionProposalHandler(rw, r, node)
 	})
 
 	tlsConfig, err := createClientConfig(rcaPath, caPath, crtPath, keyPath)
