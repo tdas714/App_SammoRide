@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"math/big"
-	"time"
 )
 
 var (
@@ -15,21 +14,6 @@ var (
 	Dispute   = byte(0x03)
 )
 
-type TransactionProposal struct {
-	TimeStamp    time.Time
-	Type         byte
-	PickupLoc    string
-	DestLoc      string
-	Traveler     *ClientInfo
-	TravelerSig  []big.Int
-	RideFair     float32
-	ArrivalTime  string
-	Driver       *ClientInfo
-	DriverSig    []big.Int
-	DriverCert   []byte
-	TravelerCert []byte
-}
-
 type TransactionProposalResponse struct {
 	Msg string
 }
@@ -37,13 +21,6 @@ type TransactionProposalResponse struct {
 type Sig struct {
 	r *big.Int
 	s *big.Int
-}
-
-func (ra *TransactionProposal) ContractSerialize() []byte {
-	js, err := json.Marshal(ra)
-	CheckErr(err, "ContactSer/encode")
-
-	return js
 }
 
 func (ra *TransactionProposalResponse) TransResSerialize() []byte {

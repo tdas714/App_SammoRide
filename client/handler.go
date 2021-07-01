@@ -109,8 +109,9 @@ func TransactionProposalHandler(w http.ResponseWriter, r *http.Request, node *No
 		transRes.Msg = "Certificates are not valid"
 	}
 
-	// Here goes the Chain code evocation
-	// Chekc for upi payment apis
+	// Here goes the Chain code ivokation
+	//diver and traveler can quary the smart contract to any number of endorsng peers.
+
 }
 
 func autheticate(rootCa, peerCa []byte) bool {
