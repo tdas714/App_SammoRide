@@ -119,6 +119,14 @@ func fileExists(filename string) bool {
 	return true
 }
 
+func GetBytes(key interface{}) []byte {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(key)
+	CheckErr(err, "getBytes")
+	return buf.Bytes()
+}
+
 func CreateDirIfNotExist(dir string) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		err = os.MkdirAll(dir, 0755)
@@ -204,9 +212,8 @@ func (c *Connections) GetRandom(num int) []string {
 }
 
 func (c *Connections) Close() {
-	bytes, err := GetBytes(c)
-	CheckErr(err, "GetBytes/C.Close")
-	err = ioutil.WriteFile(c.Path, bytes, 0700)
+	bytes := GetBytes(c)
+	err := ioutil.WriteFile(c.Path, bytes, 0700)
 	CheckErr(err, "Write/C.Close")
 }
 

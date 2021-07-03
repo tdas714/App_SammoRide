@@ -132,7 +132,7 @@ func createClientConfig(rca, ca, crt, key string) (*tls.Config, error) {
 func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
 	node *Node) {
 
-	arrivalTime := "10"
+	arrivalTime := 10
 	rideFair := 10.5
 	// // Set up a /hello resource handler
 	// http.HandleFunc("/gossip", func(rw http.ResponseWriter, r *http.Request) {
@@ -145,12 +145,12 @@ func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
 		RiderAHandler(rw, r, node)
 	})
 
-	http.HandleFunc("/OrderProposal/Traveler", func(rw http.ResponseWriter, r *http.Request) {
-		TravelerOrderProposalHandler(rw, r, arrivalTime, float32(rideFair), node)
+	http.HandleFunc("Endorcers/SignedProposal", func(rw http.ResponseWriter, r *http.Request) {
+		Endorse(rw, r, node)
 	})
 
 	http.HandleFunc("/Transaction/Proposal", func(rw http.ResponseWriter, r *http.Request) {
-		TransactionProposalHandler(rw, r, node)
+		TravelerOrderProposalHandler(rw, r, arrivalTime, float32(rideFair), node)
 	})
 
 	tlsConfig, err := createClientConfig(rcaPath, caPath, crtPath, keyPath)

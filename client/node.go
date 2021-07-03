@@ -7,12 +7,13 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io/ioutil"
-	"math/big"
+	random "math/rand"
 	"strings"
 	"time"
 
 	"github.com/App-SammoRide/policy"
-	// "github.com/App-SammoRide/client"
+	"github.com/App-SammoRide/struct/common"
+	"github.com/App-SammoRide/struct/peer"
 )
 
 type Node struct {
@@ -89,9 +90,11 @@ func (node *Node) AnnounceAvailability() {
 
 }
 
-func (node *Node) SendProposalToRider(c ClientInfo, loc, des string) {
+func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 
 	node.Connection.Add([]string{c.IP})
+
+	fmt.Println("Sending proposal to: ", c.IP, " ", c.Port)
 
 	keyPem, err := ioutil.ReadFile(node.KeyPath)
 	CheckErr(err, "orderProposalHandler")
@@ -99,60 +102,61 @@ func (node *Node) SendProposalToRider(c ClientInfo, loc, des string) {
 	certPem, err := ioutil.ReadFile(node.Certificatepath)
 	CheckErr(err, "Test")
 
-	orderProp := TransactionProposal{PickupLoc: "Currect Loc",
-		DestLoc: "Destination Loc", Traveler: node.Info, TravelerCert: certPem}
+	tbyte, err := time.Now().MarshalBinary()
+	CheckErr(err, "SendProposal/tbyte")
+	h := string(hash(tbyte))
+	random.Seed(time.Now().Unix())
 
-	fmt.Println("Sendin proposal to: ", c.IP+":"+c.Port)
-	// Have to get response
-	resp := SendData("CAs/rootCa.crt",
-		node.Certificatepath, node.KeyPath, c.IP, c.Port,
-		"OrderProposal/Traveler", orderProp.ContractSerialize(), 10) // This will be real contract
-	// HTTP response mto structure
-	// respString := fmt.Sprintf("%s", resp)
-	transProp := ContractDeserialize(bytes.NewBuffer(resp))
-	demoContract := *transProp
-	demoContract.DriverSig = nil
-	h := hash(demoContract.ContractSerialize())[:]
-	publicKey := Keydecode(transProp.Driver.PublicKey)
-	// fmt.Println(contract.Driver.PublicKey, h,
-	// 	&contract.DriverSig[0], &contract.DriverSig[1])
+	cheader := common.ChannelHeader{ChannelId: string(common.Ride), TxId: h, Epoch: 1} // Change epoch based on block height
+	sheader := common.SignatureHeader{Traveler: certPem, TravelerNonce: IntToByteArray(random.Int63())}
+	Header := common.Header{ChannelHeader: &cheader, SignatureHeader: &sheader}
+	propPayload := peer.ChaincodeProposalPayload{ChaincodeId: &peer.ChaincodeID{Name: "Hailing", Version: "1.0"},
+		Input: &peer.ChaincodeInput{PickupLocation: pickup, DestinationLocation: des}}
 
-	verify := ecdsa.Verify(publicKey, h,
-		&transProp.DriverSig[0], &transProp.DriverSig[1])
+	proposal := peer.Proposal{Header: Header.Serialize(), Payload: propPayload.Serialize()}
 
-	if verify {
-		transProp.PickupLoc = loc
-		transProp.DestLoc = des
-		node.Info.PublicKey = Keyencode(&LoadPrivateKey(keyPem).PublicKey)
-		transProp.Traveler = node.Info
-		transProp.TravelerSig = nil
-		transProp.Type = StartRide
-		transProp.TimeStamp = time.Now()
+	r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(proposal.Serialize()))
+	CheckErr(err, "sendtorider/sign")
+	sig := peer.Sig{R: r, S: s}
 
-		hash := sha256.Sum256(transProp.ContractSerialize())
-		r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash[:])
-		CheckErr(err, "SendriderProposal/Sig")
+	signedProp := peer.SignedProposal{ProposalBytes: proposal.Serialize(),
+		TravelerSignature: sig.Serialize(),
+		TravelerPublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey)}
 
-		transProp.TravelerSig = []big.Int{*r, *s}
+	resp := SendData("CAs/interCa.crt", node.Certificatepath, node.KeyPath,
+		c.IP, c.Port, "Transaction/Proposal", signedProp.Serialize(),
+		10)
 
-		if node.Connection.len() >= node.EndorsmentPolicy.NumberOfEndorsers {
-			var splited []string
-			endorsList := node.Connection.GetRandom(node.EndorsmentPolicy.NumberOfEndorsers)
-			for _, endor := range endorsList {
-				splited = strings.Split(endor, ":")
+	RespSignedProp := peer.DeSerializeSignedProposal(bytes.NewBuffer(resp))
+	driverSig := peer.DeSerializeSig(RespSignedProp.DriverSignature)
+	v := ecdsa.Verify(Keydecode(RespSignedProp.DriverPublicKey), hash(RespSignedProp.GetProposalBytes()), driverSig.R, driverSig.S)
 
-				SendData("CAs/interCa.crt", node.Certificatepath, node.KeyPath,
-					splited[0], splited[1], "Transaction/Proposal", transProp.ContractSerialize(),
-					3)
-			}
-		} else {
-			SendData("CAs/rootCa.crt",
-				node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
-				"Transaction/Proposal", transProp.ContractSerialize(), 2)
-		}
-
+	if v {
+		r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(RespSignedProp.GetProposalBytes()))
+		CheckErr(err, "RespProposal")
+		sig := peer.Sig{R: r, S: s}
+		RespSignedProp.TravelerSignature = sig.Serialize()
+		// We have to unserialize proposalbytes for checking the ride fair and arrival time, chancode decorations
+		// Send this to endrosers as per endorcement policy
 	}
 
+}
+
+//
+// SEND TO ENDROSERS , RUN CHAIN CODE BASED ON decorations , ADD STRUCTURES FOR PROPOSAL RESPONSE
+//
+
+func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal) {
+	if node.Connection.len() >= node.EndorsmentPolicy.NumberOfEndorsers {
+		var splited []string
+		endorsList := node.Connection.GetRandom(node.EndorsmentPolicy.NumberOfEndorsers)
+		for _, endor := range endorsList {
+			splited = strings.Split(endor, ":")
+			SendData("CAs/rootCa.crt",
+				node.Certificatepath, node.KeyPath, splited[0], splited[1],
+				"Endorcers/SignedProposal", signedProp.Serialize(), 2)
+		}
+	}
 }
 
 func (node *Node) Gossip(header int64, num int, data []byte, ipAddr, domain string) {

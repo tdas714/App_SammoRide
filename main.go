@@ -16,17 +16,6 @@ func main() {
 	node := client.NewNode(*InputYml, "ClientDatabase")
 
 	fmt.Println(node.Info.City, node.Info.Country, node.Info.Name)
-	// client.SendEnrollRequest(node.Info.Country, node.Info.Name,
-	// 	node.Info.Province, node.Info.City, node.Info.Postalcode, client.GetIP())
-
-	// cPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.crt",
-	// 	node.Info.Country, node.Info.Name, node.Info.Province,
-	// 	node.Info.City)
-	// kPath := fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.key",
-	// 	node.Info.Country, node.Info.Name, node.Info.Province,
-	// 	node.Info.City)
-
-	// node.CreateNode()
 
 	for {
 		fmt.Println("Enter Your Command: ")

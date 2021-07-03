@@ -1,11 +1,8 @@
 package client
 
 import (
-	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"io"
-	"math/big"
 )
 
 var (
@@ -16,11 +13,6 @@ var (
 
 type TransactionProposalResponse struct {
 	Msg string
-}
-
-type Sig struct {
-	r *big.Int
-	s *big.Int
 }
 
 func (ra *TransactionProposalResponse) TransResSerialize() []byte {
@@ -37,21 +29,21 @@ func TransResDeserialize(data io.Reader) *TransactionProposalResponse {
 	return txPropRes
 }
 
-func ContractDeserialize(data io.Reader) *TransactionProposal {
-	var txProp *TransactionProposal
-	json.NewDecoder(data).Decode(&txProp)
+// func ContractDeserialize(data io.Reader) *TransactionProposal {
+// 	var txProp *TransactionProposal
+// 	json.NewDecoder(data).Decode(&txProp)
 
-	return txProp
-}
+// 	return txProp
+// }
 
-func ContractFromBytes(data []byte) *TransactionProposal {
-	var gData TransactionProposal
+// func ContractFromBytes(data []byte) *TransactionProposal {
+// 	var gData TransactionProposal
 
-	decoder := gob.NewDecoder(bytes.NewReader(data))
+// 	decoder := gob.NewDecoder(bytes.NewReader(data))
 
-	err := decoder.Decode(&gData)
+// 	err := decoder.Decode(&gData)
 
-	CheckErr(err, "ContractDS/decode")
+// 	CheckErr(err, "ContractDS/decode")
 
-	return &gData
-}
+// 	return &gData
+// }

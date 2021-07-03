@@ -3,14 +3,17 @@ package client
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/big"
+	random "math/rand"
 	"net/http"
 	"time"
+
+	ride "github.com/App-SammoRide/chaincodes/Ride"
+	"github.com/App-SammoRide/struct/common"
+	"github.com/App-SammoRide/struct/peer"
 )
 
 // func GossipHandler(w http.ResponseWriter, r *http.Request, name string) {
@@ -36,82 +39,72 @@ func RiderAHandler(w http.ResponseWriter, r *http.Request,
 
 // Handles proposal from traveler
 func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
-	arriveTime string, rideFair float32, node *Node) {
+	arriveTime int, rideFair float32, node *Node) {
 
 	keyPem, err := ioutil.ReadFile(node.KeyPath)
 	CheckErr(err, "orderProposalHandler")
 
 	certPem, err := ioutil.ReadFile(node.Certificatepath)
-	CheckErr(err, "Test")
+	CheckErr(err, "OrderProposalhandler/CertPem")
 
-	contract := ContractDeserialize(resp.Body)
+	signedprop := peer.DeSerializeSignedProposal(resp.Body)
+	travelerSig := peer.DeSerializeSig(signedprop.TravelerSignature)
+	proposalbytes := signedprop.GetProposalBytes()
+	v := ecdsa.Verify(Keydecode(signedprop.TravelerPublicKey), hash(proposalbytes), travelerSig.R, travelerSig.S)
 
-	fmt.Println("Received Rider Order Proposal from: ",
-		contract.Traveler.IP+":"+contract.Traveler.Port)
+	if v {
+		proposal := peer.DeSerializeProposal(proposalbytes)
+		// Check Pickup location and Destination location + arival diatance
+		// Note txId
+		headerbytes := proposal.GetHeader()
+		header := common.DeSerializeHeader(headerbytes)
+		if header.ChannelHeader.ChannelId != string(common.Ride) {
+			return
+		}
+		header.SignatureHeader.Driver = certPem
+		header.SignatureHeader.DriverNonce = IntToByteArray(random.Int63())
 
-	node.Connection.Add([]string{contract.Traveler.IP + ":" + contract.Traveler.Port})
+		chaincodepayload := peer.DeSerializeChaincodeProposalPayload(proposal.GetPayload())
+		chaincodepayload.Input.ArrivalTime = time.Minute * time.Duration(arriveTime)
+		chaincodepayload.Input.RideFair = rideFair
 
-	contract.Driver = node.Info
-	contract.RideFair = rideFair
-	contract.ArrivalTime = arriveTime
-	contract.TravelerSig = nil
-	contract.DriverSig = nil
-	node.Info.PublicKey = Keyencode(&LoadPrivateKey(keyPem).PublicKey)
-	contract.Driver = node.Info
-	contract.DriverCert = certPem
+		chaincodepayload.Input.Decorations = ride.GetRide()
 
-	hash := sha256.Sum256(contract.ContractSerialize())
-	r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash[:])
+		proposalbytes = proposal.Serialize()
 
-	contract.DriverSig = []big.Int{*r, *s}
+		r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(proposalbytes))
+		CheckErr(err, "sendtorider/sign")
+		sig := peer.Sig{R: r, S: s}
 
-	fmt.Println(contract)
-	w.Write(contract.ContractSerialize())
+		signedprop = &peer.SignedProposal{ProposalBytes: proposalbytes,
+			DriverSignature: sig.Serialize(),
+			DriverPublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey)}
+	}
+	fmt.Println(signedprop)
+	w.Write(signedprop.Serialize())
 }
 
-func TransactionProposalHandler(w http.ResponseWriter, r *http.Request, node *Node) {
+func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
+	signedProposal := peer.DeSerializeSignedProposal(resp.Body)
+	travelerSig := peer.DeSerializeSig(signedProposal.TravelerSignature)
+	driverSig := peer.DeSerializeSig(signedProposal.DriverSignature)
 
-	transRes := TransactionProposalResponse{}
-	transProp := ContractDeserialize(r.Body)
+	travelerV := ecdsa.Verify(Keydecode(signedProposal.TravelerPublicKey), hash(signedProposal.GetProposalBytes()), travelerSig.R, travelerSig.S)
+	driverV := ecdsa.Verify(Keydecode(signedProposal.DriverPublicKey), hash(signedProposal.GetProposalBytes()), driverSig.R, driverSig.S)
 
-	// Check for ktime diffrence from now and transaction proposal creation time
-	timeDiff := time.Now().Sub(transProp.TimeStamp)
-	if timeDiff >= node.EndorsmentPolicy.ProposalTimeDiff {
-		transRes.Msg = "Session timed Out, Try again"
+	if travelerV && driverV {
+		proposal := peer.DeSerializeProposal(signedProposal.ProposalBytes)
+		chaincodeProp := peer.DeSerializeChaincodeProposalPayload(proposal.GetPayload())
+		header := common.DeSerializeHeader(proposal.GetHeader())
+		if time.Now().Before(header.ChannelHeader.Timestamp.Add(time.Duration(chaincodeProp.GetTimeout()))) {
+			if autheticate(node.RootCertificate, header.SignatureHeader.Driver) && autheticate(node.RootCertificate, header.SignatureHeader.Traveler) {
+				driver := LoadCertificate(header.SignatureHeader.Driver)
+				if driver.Subject.CommonName == "Driver" {
+					// Run smart convtract
+				}
+			}
+		}
 	}
-
-	if transProp.TravelerSig != nil {
-		transRes.Msg = "Traveler Signature Not Found!"
-	}
-
-	if transProp.DriverSig != nil {
-		transRes.Msg = "Driver Signature Not Found!"
-	}
-
-	demoTransRes := transRes
-	hash := sha256.Sum256(demoTransRes.TransResSerialize())
-
-	verify := ecdsa.Verify(Keydecode(transProp.Traveler.PublicKey), hash[:],
-		&transProp.TravelerSig[0], &transProp.TravelerSig[1])
-
-	if !verify {
-		transRes.Msg = "Signature is Invalid"
-	}
-
-	// Create writer policy to check driver has authorized for driving
-	if node.WritersPolicy.DriverCheck != string(LoadCertificate(transProp.DriverCert).Subject.CommonName) {
-		transRes.Msg = "Drivers Certificate Corrupted"
-	}
-	wrCheck := []bool{}
-	wrCheck = append(wrCheck, autheticate(node.RootCertificate, transProp.DriverCert)) ///make Verify with root cert
-	wrCheck = append(wrCheck, autheticate(node.RootCertificate, transProp.TravelerCert))
-	if !Eq(node.WritersPolicy.CertificateValidation, wrCheck) {
-		transRes.Msg = "Certificates are not valid"
-	}
-
-	// Here goes the Chain code ivokation
-	//diver and traveler can quary the smart contract to any number of endorsng peers.
-
 }
 
 func autheticate(rootCa, peerCa []byte) bool {
