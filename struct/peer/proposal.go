@@ -182,7 +182,9 @@ type ChaincodeProposalPayload struct {
 
 	ChaincodeId *ChaincodeID
 	Input       *ChaincodeInput
-	Timeout     int32
+	Timeout     time.Duration
+	IP          string
+	Port        string
 }
 
 func (m *ChaincodeProposalPayload) Serialize() []byte {
@@ -213,7 +215,7 @@ func (m *ChaincodeProposalPayload) GetChaincodeInput() *ChaincodeInput {
 	return nil
 }
 
-func (m *ChaincodeProposalPayload) GetTimeout() int32 {
+func (m *ChaincodeProposalPayload) GetTimeout() time.Duration {
 	if m != nil {
 		return m.Timeout
 	}
@@ -255,7 +257,6 @@ type ChaincodeInput struct {
 	DestinationLocation string
 	RideFair            float32
 	ArrivalTime         time.Duration
-	Decorations         map[string]interface{}
 	Hash                []byte
 }
 
@@ -282,10 +283,4 @@ func (m *ChaincodeInput) GetArrivalTime() time.Duration {
 		return m.ArrivalTime
 	}
 	return time.Minute * -10
-}
-func (m *ChaincodeInput) GetDecoration() interface{} {
-	if m != nil {
-		return m.Decorations
-	}
-	return nil
 }

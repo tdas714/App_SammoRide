@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	ride "github.com/App-SammoRide/chaincodes/Ride"
+	"github.com/App-SammoRide/chaincodes/ride_1_0"
 	"github.com/App-SammoRide/struct/common"
 	"github.com/App-SammoRide/struct/peer"
 )
@@ -40,7 +40,7 @@ func RiderAHandler(w http.ResponseWriter, r *http.Request,
 // Handles proposal from traveler
 func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 	arriveTime int, rideFair float32, node *Node) {
-
+	fmt.Println("Received from: ", resp.RemoteAddr)
 	keyPem, err := ioutil.ReadFile(node.KeyPath)
 	CheckErr(err, "orderProposalHandler")
 
@@ -63,28 +63,35 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 		}
 		header.SignatureHeader.Driver = certPem
 		header.SignatureHeader.DriverNonce = IntToByteArray(random.Int63())
+		header.ChannelHeader.Timestamp = time.Now()
 
 		chaincodepayload := peer.DeSerializeChaincodeProposalPayload(proposal.GetPayload())
 		chaincodepayload.Input.ArrivalTime = time.Minute * time.Duration(arriveTime)
 		chaincodepayload.Input.RideFair = rideFair
+		chaincodepayload.Timeout = time.Duration(time.Minute * 2)
 
-		chaincodepayload.Input.Decorations = ride.GetRide()
+		fmt.Println(header)
+		fmt.Println(chaincodepayload)
+		respProposal := peer.Proposal{Header: header.Serialize(), Payload: chaincodepayload.Serialize()}
 
-		proposalbytes = proposal.Serialize()
-
-		r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(proposalbytes))
+		r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(respProposal.Serialize()))
 		CheckErr(err, "sendtorider/sign")
 		sig := peer.Sig{R: r, S: s}
 
-		signedprop = &peer.SignedProposal{ProposalBytes: proposalbytes,
-			DriverSignature: sig.Serialize(),
-			DriverPublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey)}
+		// signedprop.ProposalBytes = proposalbytes
+		// signedprop.DriverSignature = sig.Serialize()
+		// signedprop.DriverPublicKey = Keyencode(&LoadPrivateKey(keyPem).PublicKey)
+
+		sendSignedprop := peer.SignedProposal{ProposalBytes: respProposal.Serialize(),
+			DriverSignature: sig.Serialize(), DriverPublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey),
+			TravelerSignature: travelerSig.Serialize(), TravelerPublicKey: signedprop.TravelerPublicKey}
+		// // fmt.Println(signedprop)
+		w.Write(sendSignedprop.Serialize())
 	}
-	fmt.Println(signedprop)
-	w.Write(signedprop.Serialize())
 }
 
 func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
+	fmt.Println("Recieved msg for endorse: ", resp.RemoteAddr)
 	signedProposal := peer.DeSerializeSignedProposal(resp.Body)
 	travelerSig := peer.DeSerializeSig(signedProposal.TravelerSignature)
 	driverSig := peer.DeSerializeSig(signedProposal.DriverSignature)
@@ -93,18 +100,65 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 	driverV := ecdsa.Verify(Keydecode(signedProposal.DriverPublicKey), hash(signedProposal.GetProposalBytes()), driverSig.R, driverSig.S)
 
 	if travelerV && driverV {
+		fmt.Println("verify")
+
+		// certPem, err := ioutil.ReadFile(node.Certificatepath)
+		// CheckErr(err, "OrderProposalhandler/CertPem")
+
+		interPem, err := ioutil.ReadFile("CAs/interCa.crt")
+		CheckErr(err, "Interca")
+
 		proposal := peer.DeSerializeProposal(signedProposal.ProposalBytes)
 		chaincodeProp := peer.DeSerializeChaincodeProposalPayload(proposal.GetPayload())
 		header := common.DeSerializeHeader(proposal.GetHeader())
+		fmt.Println("Added time: ", header.ChannelHeader.Timestamp.Add(time.Duration(chaincodeProp.GetTimeout())))
+		fmt.Println(header.ChannelHeader.Timestamp)
 		if time.Now().Before(header.ChannelHeader.Timestamp.Add(time.Duration(chaincodeProp.GetTimeout()))) {
-			if autheticate(node.RootCertificate, header.SignatureHeader.Driver) && autheticate(node.RootCertificate, header.SignatureHeader.Traveler) {
+			fmt.Println("Timeout")
+			if VerifyPeer(node.RootCertificate, interPem, header.SignatureHeader.Driver) { //} && autheticate(node.RootCertificate, header.SignatureHeader.Traveler) {
+				fmt.Println("Authenticate")
 				driver := LoadCertificate(header.SignatureHeader.Driver)
-				if driver.Subject.CommonName == "Driver" {
-					// Run smart convtract
+				fmt.Println("Receive from: ", LoadCertificate(header.SignatureHeader.Traveler).IPAddresses)
+
+				if driver.Subject.CommonName == "Driver" && time.Now().Before(driver.NotAfter) {
+
+					fmt.Println("Invoke Chancode: ", chaincodeProp.ChaincodeId.GetName(), chaincodeProp.ChaincodeId.GetVersion())
+					if chaincodeProp.ChaincodeId.GetName() == "ride" && chaincodeProp.ChaincodeId.GetVersion() == "1.0" {
+						rwset, events, status := ride_1_0.StartRide(chaincodeProp.Input.PickupLocation, chaincodeProp.Input.DestinationLocation,
+							chaincodeProp.Input.RideFair, header.ChannelHeader.TxId, signedProposal.DriverPublicKey,
+							signedProposal.TravelerPublicKey, chaincodeProp.ChaincodeId)
+
+						chainAction := peer.ChaincodeAction{Results: rwset, Events: events, ChaincodeId: chaincodeProp.ChaincodeId}
+						proposalResPayload := peer.ProposalResponsePayload{ProposalHash: hash(signedProposal.GetProposalBytes()), Extension: &chainAction}
+
+						proposalRes := peer.ProposalResponse{Timestamp: header.ChannelHeader.Timestamp, Response: &peer.Response{Status: int32(status)},
+							Payload: proposalResPayload.Serialize()}
+
+						certPem, err := ioutil.ReadFile(node.Certificatepath)
+						CheckErr(err, "Endorsment/certPem")
+
+						keyPem, err := ioutil.ReadFile(node.KeyPath)
+						CheckErr(err, "endorsment/Keypem")
+
+						r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(proposalRes.Serialize()))
+						CheckErr(err, "sendtorider/sign")
+						sig := peer.Sig{R: r, S: s}
+
+						endorcer := peer.Endorsement{Endorser: certPem, Signature: &sig}
+						proposalRes.Endorsement = &endorcer
+
+						SendData("CAs/rootCa.crt",
+							node.Certificatepath, node.KeyPath, chaincodeProp.IP, chaincodeProp.Port,
+							"Traveler/SignedEndorsement", proposalRes.Serialize(), 2)
+					}
 				}
 			}
 		}
 	}
+}
+
+func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node *Node) {
+
 }
 
 func autheticate(rootCa, peerCa []byte) bool {

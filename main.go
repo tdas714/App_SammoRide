@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	// ride "github.com/App-SammoRide/chaincodes/Ride"
+
 	"github.com/App-SammoRide/client"
 	// "github.com/App-SammoRide/node"
 )

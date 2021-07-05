@@ -1,13 +1,12 @@
 {
 	"folders": [
 		{
+			"name": "sammoRide",
 			"path": "../sammoRide"
 		},
 		{
+			"name": "App-SammoRide",
 			"path": "."
-		},
-		{
-			"path": "../ChainCode"
 		}
 	],
 	"settings": {}

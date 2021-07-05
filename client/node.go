@@ -110,7 +110,7 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 	cheader := common.ChannelHeader{ChannelId: string(common.Ride), TxId: h, Epoch: 1} // Change epoch based on block height
 	sheader := common.SignatureHeader{Traveler: certPem, TravelerNonce: IntToByteArray(random.Int63())}
 	Header := common.Header{ChannelHeader: &cheader, SignatureHeader: &sheader}
-	propPayload := peer.ChaincodeProposalPayload{ChaincodeId: &peer.ChaincodeID{Name: "Hailing", Version: "1.0"},
+	propPayload := peer.ChaincodeProposalPayload{ChaincodeId: &peer.ChaincodeID{Name: "ride", Version: "1.0"},
 		Input: &peer.ChaincodeInput{PickupLocation: pickup, DestinationLocation: des}}
 
 	proposal := peer.Proposal{Header: Header.Serialize(), Payload: propPayload.Serialize()}
@@ -128,6 +128,12 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 		10)
 
 	RespSignedProp := peer.DeSerializeSignedProposal(bytes.NewBuffer(resp))
+
+	propb := RespSignedProp.GetProposalBytes()
+	prop := peer.DeSerializeProposal(propb)
+	header := common.DeSerializeHeader(prop.GetHeader())
+	fmt.Println(header.ChannelHeader.Timestamp)
+
 	driverSig := peer.DeSerializeSig(RespSignedProp.DriverSignature)
 	v := ecdsa.Verify(Keydecode(RespSignedProp.DriverPublicKey), hash(RespSignedProp.GetProposalBytes()), driverSig.R, driverSig.S)
 
@@ -138,6 +144,8 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 		RespSignedProp.TravelerSignature = sig.Serialize()
 		// We have to unserialize proposalbytes for checking the ride fair and arrival time, chancode decorations
 		// Send this to endrosers as per endorcement policy
+
+		node.SendProposalToEndorser(RespSignedProp, c)
 	}
 
 }
@@ -146,17 +154,18 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 // SEND TO ENDROSERS , RUN CHAIN CODE BASED ON decorations , ADD STRUCTURES FOR PROPOSAL RESPONSE
 //
 
-func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal) {
-	if node.Connection.len() >= node.EndorsmentPolicy.NumberOfEndorsers {
-		var splited []string
-		endorsList := node.Connection.GetRandom(node.EndorsmentPolicy.NumberOfEndorsers)
-		for _, endor := range endorsList {
-			splited = strings.Split(endor, ":")
-			SendData("CAs/rootCa.crt",
-				node.Certificatepath, node.KeyPath, splited[0], splited[1],
-				"Endorcers/SignedProposal", signedProp.Serialize(), 2)
-		}
-	}
+func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal, c ClientInfo) {
+	fmt.Println("Sending to endorser: ", c.IP+" "+"4000")
+	// if node.Connection.len() >= node.EndorsmentPolicy.NumberOfEndorsers {
+	// 	var splited []string
+	// 	endorsList := node.Connection.GetRandom(node.EndorsmentPolicy.NumberOfEndorsers)
+	// 	for _, endor := range endorsList {
+	// splited = strings.Split(endor, ":")
+	SendData("CAs/rootCa.crt",
+		node.Certificatepath, node.KeyPath, c.IP, "4000",
+		"Endorcers/SignedProposal", signedProp.Serialize(), 2)
+	// 	}
+	// }
 }
 
 func (node *Node) Gossip(header int64, num int, data []byte, ipAddr, domain string) {

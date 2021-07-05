@@ -32,7 +32,7 @@ func VerifyOrderer(rootCa, ordererCa []byte) {
 	log.Print("Orderer Verified")
 }
 
-func VerifyPeer(rootCa, ordererCa, peerCa []byte) {
+func VerifyPeer(rootCa, ordererCa, peerCa []byte) bool {
 	roots := x509.NewCertPool()
 	ok := roots.AppendCertsFromPEM([]byte(rootCa))
 	if !ok {
@@ -55,7 +55,8 @@ func VerifyPeer(rootCa, ordererCa, peerCa []byte) {
 
 	if _, err := cert.Verify(opts); err != nil {
 		panic("failed to verify certificate: " + err.Error())
+		return false
 	}
 	log.Print("Peer Verified")
-
+	return true
 }

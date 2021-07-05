@@ -145,12 +145,16 @@ func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
 		RiderAHandler(rw, r, node)
 	})
 
-	http.HandleFunc("Endorcers/SignedProposal", func(rw http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/Endorcers/SignedProposal", func(rw http.ResponseWriter, r *http.Request) {
 		Endorse(rw, r, node)
 	})
 
 	http.HandleFunc("/Transaction/Proposal", func(rw http.ResponseWriter, r *http.Request) {
 		TravelerOrderProposalHandler(rw, r, arrivalTime, float32(rideFair), node)
+	})
+
+	http.HandleFunc("/Traveler/SignedEndorsement", func(rw http.ResponseWriter, r *http.Request) {
+		EndorsementResponseHandler(rw, r, node)
 	})
 
 	tlsConfig, err := createClientConfig(rcaPath, caPath, crtPath, keyPath)
@@ -216,7 +220,7 @@ func SendData(ca, crt, key, ipAddr, port,
 		}
 
 		// Print the response body to stdout
-		fmt.Printf("%s\n", body)
+		// fmt.Printf("%s\n", body)
 		return body
 	}
 }
