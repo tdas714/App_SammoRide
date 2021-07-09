@@ -2,6 +2,7 @@ package ride_1_0
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 
@@ -48,10 +49,11 @@ func StartRide(pickupLoc, destiLoc string, ridefair float32, txid string, driver
 	codeEventComplete := peer.ChaincodeEvent{ChaincodeId: codeId, TxId: txid, EventName: "Complete", Payload: []byte(completeCode)}
 	codeEventDispute := peer.ChaincodeEvent{ChaincodeId: codeId, TxId: txid, EventName: "Dispute", Payload: []byte(disputeCode)}
 
-	var events *peer.Events
-
-	events.Append(&codeEventComplete)
-	events.Append(&codeEventDispute)
+	chaincodeEvents := []*peer.ChaincodeEvent{&codeEventDispute, &codeEventComplete}
+	fmt.Println(chaincodeEvents)
+	var events peer.EventsStruct
+	events.ChaincodeEvents = make([]*peer.ChaincodeEvent, 2)
+	events.ChaincodeEvents = []*peer.ChaincodeEvent{&codeEventDispute, &codeEventComplete}
 
 	return kvrwSet.Serialize(), events.Serialize(), 200
 

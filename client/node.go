@@ -17,14 +17,16 @@ import (
 )
 
 type Node struct {
-	Info             *ClientInfo
-	Connection       *Connections
-	RootCertificate  []byte
-	Certificatepath  string
-	KeyPath          string
-	GossipSentList   map[int64]string
-	EndorsmentPolicy *policy.EndorsmentPolicy
-	WritersPolicy    *policy.WritersPolicy
+	Info                *ClientInfo
+	Connection          *Connections
+	RootCertificate     []byte
+	Certificatepath     string
+	KeyPath             string
+	GossipSentList      map[int64]string
+	EndorsmentPolicy    *policy.EndorsmentPolicy
+	WritersPolicy       *policy.WritersPolicy
+	SentProposal        map[time.Time]*peer.SignedProposal
+	ReceivedEndorsement map[time.Time][]*peer.Endorsement
 }
 
 func NewNode(InputYml, dir string) *Node {
@@ -52,7 +54,8 @@ func NewNode(InputYml, dir string) *Node {
 	endors := policy.GetEndorsmentPolicy()
 	writers := policy.GetWritersPolicy()
 	node := Node{Info: &c, Connection: conn, Certificatepath: cPath, KeyPath: kPath,
-		GossipSentList: gSL, EndorsmentPolicy: endors, WritersPolicy: writers, RootCertificate: rootca}
+		GossipSentList: gSL, EndorsmentPolicy: endors, WritersPolicy: writers, RootCertificate: rootca, SentProposal: make(map[time.Time]*peer.SignedProposal),
+		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement)}
 	return &node
 }
 
@@ -111,7 +114,7 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 	sheader := common.SignatureHeader{Traveler: certPem, TravelerNonce: IntToByteArray(random.Int63())}
 	Header := common.Header{ChannelHeader: &cheader, SignatureHeader: &sheader}
 	propPayload := peer.ChaincodeProposalPayload{ChaincodeId: &peer.ChaincodeID{Name: "ride", Version: "1.0"},
-		Input: &peer.ChaincodeInput{PickupLocation: pickup, DestinationLocation: des}}
+		Input: &peer.ChaincodeInput{PickupLocation: pickup, DestinationLocation: des}, IP: node.Info.IP, Port: node.Info.Port}
 
 	proposal := peer.Proposal{Header: Header.Serialize(), Payload: propPayload.Serialize()}
 
@@ -144,7 +147,7 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 		RespSignedProp.TravelerSignature = sig.Serialize()
 		// We have to unserialize proposalbytes for checking the ride fair and arrival time, chancode decorations
 		// Send this to endrosers as per endorcement policy
-
+		node.SentProposal[header.ChannelHeader.Timestamp] = RespSignedProp
 		node.SendProposalToEndorser(RespSignedProp, c)
 	}
 

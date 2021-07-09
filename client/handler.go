@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/x509"
@@ -63,7 +64,8 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 		}
 		header.SignatureHeader.Driver = certPem
 		header.SignatureHeader.DriverNonce = IntToByteArray(random.Int63())
-		header.ChannelHeader.Timestamp = time.Now()
+		timeStamp := time.Now()
+		header.ChannelHeader.Timestamp = timeStamp
 
 		chaincodepayload := peer.DeSerializeChaincodeProposalPayload(proposal.GetPayload())
 		chaincodepayload.Input.ArrivalTime = time.Minute * time.Duration(arriveTime)
@@ -85,11 +87,13 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 		sendSignedprop := peer.SignedProposal{ProposalBytes: respProposal.Serialize(),
 			DriverSignature: sig.Serialize(), DriverPublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey),
 			TravelerSignature: travelerSig.Serialize(), TravelerPublicKey: signedprop.TravelerPublicKey}
+
 		// // fmt.Println(signedprop)
 		w.Write(sendSignedprop.Serialize())
 	}
 }
 
+// RESET SENDING PROPOSAL mAP
 func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 	fmt.Println("Recieved msg for endorse: ", resp.RemoteAddr)
 	signedProposal := peer.DeSerializeSignedProposal(resp.Body)
@@ -140,13 +144,13 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 						keyPem, err := ioutil.ReadFile(node.KeyPath)
 						CheckErr(err, "endorsment/Keypem")
 
-						r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(proposalRes.Serialize()))
+						r, s, err := ecdsa.Sign(rand.Reader, LoadPrivateKey(keyPem), hash(proposalResPayload.Serialize()))
 						CheckErr(err, "sendtorider/sign")
 						sig := peer.Sig{R: r, S: s}
 
-						endorcer := peer.Endorsement{Endorser: certPem, Signature: &sig}
+						endorcer := peer.Endorsement{Endorser: certPem, Signature: &sig, PublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey)}
 						proposalRes.Endorsement = &endorcer
-
+						fmt.Println("sending signed endorsement: ", chaincodeProp.IP, chaincodeProp.Port)
 						SendData("CAs/rootCa.crt",
 							node.Certificatepath, node.KeyPath, chaincodeProp.IP, chaincodeProp.Port,
 							"Traveler/SignedEndorsement", proposalRes.Serialize(), 2)
@@ -158,7 +162,53 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 }
 
 func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node *Node) {
+	fmt.Println("Received endrosements")
+	proposalRes := peer.DeSerializeProposalResponse(resp.Body)
+	signedProp, ok := node.SentProposal[proposalRes.GetTimestamp()]
+	fmt.Println(ok)
+	if ok {
+		fmt.Println("Activated")
+		if proposalRes.Response.GetStatus() == 200 {
+			verify := ecdsa.Verify(Keydecode(proposalRes.Endorsement.PublicKey), hash(proposalRes.Payload), proposalRes.Endorsement.Signature.R,
+				proposalRes.Endorsement.Signature.S)
+			if verify {
+				fmt.Println("verified")
+				propResPayload := peer.DeSerializeProposalResponsePayload(proposalRes.GetPayload())
+				h := hash(signedProp.Serialize())
+				if bytes.Compare(propResPayload.ProposalHash, h) == 1 {
+					endorsement := node.ReceivedEndorsement[proposalRes.Timestamp]
 
+					for _, e := range endorsement {
+						if e != proposalRes.Endorsement {
+							fmt.Println("Returned")
+							return
+						}
+					}
+					endorsement = append(endorsement, proposalRes.Endorsement)
+					if len(endorsement) >= 1 {
+						fmt.Println("Got endorsement")
+						proposal := peer.DeSerializeProposal(signedProp.GetProposalBytes())
+
+						chaincodeEndorsedAction := peer.ChaincodeEndorsedAction{ProposalResponsePayload: proposalRes.GetPayload(),
+							Endorsements: endorsement}
+
+						chaincodeacionPayload := peer.ChaincodeActionPayload{ChaincodeProposalPayload: proposal.GetPayload(),
+							Action: &chaincodeEndorsedAction}
+
+						transactionAcion := peer.TransactionAction{Header: proposal.GetHeader(), Payload: chaincodeacionPayload.Serialize()}
+
+						transaction := peer.Transaction{Actions: []*peer.TransactionAction{&transactionAcion}}
+
+						// SENDING TRANSACTION  TO ORDER FOR BLOCK CONSTRACTION
+						SendData("CAs/rootCa.crt",
+							node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
+							"TransactionCommitmentRequest", transaction.Serialize(), 2)
+						fmt.Println("Sent  to orderer")
+					}
+				}
+			}
+		}
+	}
 }
 
 func autheticate(rootCa, peerCa []byte) bool {
@@ -183,7 +233,7 @@ func autheticate(rootCa, peerCa []byte) bool {
 	return true
 }
 
-func Eq(a, b []bool) bool {
+func Eq(a, b []interface{}) bool {
 	if len(a) != len(b) {
 		return false
 	}

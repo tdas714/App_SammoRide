@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -145,9 +146,9 @@ func (m *ProposalResponsePayload) Serialize() []byte {
 	return js
 }
 
-func DeSerializeProposalResponsePayload(data io.Reader) *ProposalResponsePayload {
+func DeSerializeProposalResponsePayload(data []byte) *ProposalResponsePayload {
 	var m *ProposalResponsePayload
-	json.NewDecoder(data).Decode(&m)
+	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
 	return m
 }
 
@@ -180,6 +181,7 @@ type Endorsement struct {
 	// Signature of the payload included in ProposalResponse concatenated with
 	// the endorser's certificate; ie, sign(ProposalResponse.payload + endorser)
 	Signature *Sig
+	PublicKey string
 }
 
 func (m *Endorsement) Serialize() []byte {
@@ -208,6 +210,13 @@ func (m *Endorsement) GetSignature() *Sig {
 		return m.Signature
 	}
 	return nil
+}
+
+func (m *Endorsement) GetPublicKey() string {
+	if m != nil {
+		return m.PublicKey
+	}
+	return ""
 }
 
 // FINDA WAY TO MAKE DELAYED PAYMENT, WITH UPI. cAN'T USE UPI IN GOLANG .RETURN AMOUNT IN INT.IN THE END OF RIDE COMPLETE. MONEY GETS PAIED TO
@@ -288,15 +297,11 @@ func (m *ChaincodeEvent) GetPayload() []byte {
 	return nil
 }
 
-type Events struct {
-	Events []*ChaincodeEvent
+type EventsStruct struct {
+	ChaincodeEvents []*ChaincodeEvent
 }
 
-func (m *Events) Append(code *ChaincodeEvent) {
-	m.Events = append(m.Events, code)
-}
-
-func (m *Events) Serialize() []byte {
+func (m *EventsStruct) Serialize() []byte {
 	js, err := json.Marshal(m)
 	if err != nil {
 		log.Panic(err.Error() + " - " + "Events/Serialize")
@@ -304,8 +309,8 @@ func (m *Events) Serialize() []byte {
 	return js
 }
 
-func DeSerializeEvetns(data io.Reader) *Events {
-	var m *Events
+func DeSerializeEvetns(data io.Reader) *EventsStruct {
+	var m *EventsStruct
 	json.NewDecoder(data).Decode(&m)
 	return m
 }

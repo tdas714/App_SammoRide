@@ -21,7 +21,7 @@ func (m *KVRWSet) Serialize() []byte {
 	return js
 }
 
-func DeSerializeEvetns(data io.Reader) *KVRWSet {
+func DeSerializeKVRWSet(data io.Reader) *KVRWSet {
 	var m *KVRWSet
 	json.NewDecoder(data).Decode(&m)
 	return m

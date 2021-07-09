@@ -208,7 +208,7 @@ func SendData(ca, crt, key, ipAddr, port,
 
 	r, err := client.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		fmt.Println("Timeout Exceeds")
+		fmt.Println(err)
 		return []byte{}
 	} else {
 
