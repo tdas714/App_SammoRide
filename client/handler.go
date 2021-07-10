@@ -17,15 +17,6 @@ import (
 	"github.com/App-SammoRide/struct/peer"
 )
 
-// func GossipHandler(w http.ResponseWriter, r *http.Request, name string) {
-// 	bodyBytes, err := ioutil.ReadAll(r.Body)
-// 	CheckErr(err, "gossipRequest")
-
-// 	// Write "Hello, world!" to the response body
-// 	fmt.Println("Gossip from: ", r.RemoteAddr)
-// 	io.WriteString(w, "Lets gossip!\n")
-// }
-
 func RiderAHandler(w http.ResponseWriter, r *http.Request,
 	node *Node) {
 

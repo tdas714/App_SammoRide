@@ -54,7 +54,7 @@ func VerifyPeer(rootCa, ordererCa, peerCa []byte) bool {
 	}
 
 	if _, err := cert.Verify(opts); err != nil {
-		panic("failed to verify certificate: " + err.Error())
+		// panic("failed to verify certificate: " + err.Error())
 		return false
 	}
 	log.Print("Peer Verified")
