@@ -1,8 +1,8 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
-	"io"
 	"log"
 )
 
@@ -21,9 +21,9 @@ func (m *KVRWSet) Serialize() []byte {
 	return js
 }
 
-func DeSerializeKVRWSet(data io.Reader) *KVRWSet {
+func DeSerializeKVRWSet(data []byte) *KVRWSet {
 	var m *KVRWSet
-	json.NewDecoder(data).Decode(&m)
+	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
 	return m
 }
 

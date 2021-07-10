@@ -13,6 +13,7 @@ import (
 
 	"github.com/App-SammoRide/policy"
 	"github.com/App-SammoRide/struct/common"
+	"github.com/App-SammoRide/struct/ledger"
 	"github.com/App-SammoRide/struct/peer"
 )
 
@@ -27,6 +28,8 @@ type Node struct {
 	WritersPolicy       *policy.WritersPolicy
 	SentProposal        map[time.Time]*peer.SignedProposal
 	ReceivedEndorsement map[time.Time][]*peer.Endorsement
+	WorldState          *ledger.WorldState
+	Blockchan           *ledger.Blockchain
 }
 
 func NewNode(InputYml, dir string) *Node {
@@ -35,6 +38,9 @@ func NewNode(InputYml, dir string) *Node {
 
 	filepath := fmt.Sprintf("../%s/%s", dir, strings.Split(c.Name, ".")[0])
 	CreateDirIfNotExist(filepath)
+
+	chainPath := fmt.Sprintf("../%s/%s", dir, "Chain")
+	CreateDirIfNotExist(chainPath)
 
 	conn := LoadConnections(fmt.Sprintf("%s/connections.bin", filepath))
 	defer conn.Close()
@@ -55,7 +61,7 @@ func NewNode(InputYml, dir string) *Node {
 	writers := policy.GetWritersPolicy()
 	node := Node{Info: &c, Connection: conn, Certificatepath: cPath, KeyPath: kPath,
 		GossipSentList: gSL, EndorsmentPolicy: endors, WritersPolicy: writers, RootCertificate: rootca, SentProposal: make(map[time.Time]*peer.SignedProposal),
-		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement)}
+		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement), WorldState: ledger.Init(), Blockchan: ledger.LoadDatabase(chainPath)}
 	return &node
 }
 

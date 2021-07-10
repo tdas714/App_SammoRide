@@ -157,6 +157,10 @@ func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
 		EndorsementResponseHandler(rw, r, node)
 	})
 
+	http.HandleFunc("/Committer/Block", func(rw http.ResponseWriter, r *http.Request) {
+		BlockCommitmentHandler(rw, r, node)
+	})
+
 	tlsConfig, err := createClientConfig(rcaPath, caPath, crtPath, keyPath)
 	CheckErr(err, "StartOrederServer/config")
 

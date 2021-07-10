@@ -3,6 +3,7 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"time"
 )
@@ -133,4 +134,130 @@ func DeSerializeSignatureHeader(data []byte) *SignatureHeader {
 	var m *SignatureHeader
 	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
 	return m
+}
+
+// This is finalized block structure to be shared among the orderer and peer
+// Note that the BlockHeader chains to the previous BlockHeader, and the BlockData hash is embedded
+// in the BlockHeader.  This makes it natural and obvious that the Data is included in the hash, but
+// the Metadata is not.
+type Block struct {
+	Header   *BlockHeader
+	Data     *BlockData
+	Metadata *BlockMetadata
+}
+
+func (m *Block) Serialize() []byte {
+	js, err := json.Marshal(m)
+	if err != nil {
+		log.Panic(err.Error() + " - " + "Block/Serialize")
+	}
+	return js
+}
+
+func DeSerializeBlock(data io.Reader) *Block {
+	var m *Block
+	json.NewDecoder(data).Decode(&m)
+	return m
+}
+
+func (m *Block) GetHeader() *BlockHeader {
+	if m != nil {
+		return m.Header
+	}
+	return nil
+}
+
+func (m *Block) GetData() *BlockData {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+func (m *Block) GetMetadata() *BlockMetadata {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+// BlockHeader is the element of the block which forms the block chain
+// The block header is hashed using the configured chain hashing algorithm
+// over the ASN.1 encoding of the BlockHeader
+type BlockHeader struct {
+	Number       uint64
+	PreviousHash []byte
+	DataHash     []byte
+}
+
+func (m *BlockHeader) Serialize() []byte {
+	js, err := json.Marshal(m)
+	if err != nil {
+		log.Panic(err.Error() + " - " + "BlockHeader/Serialize")
+	}
+	return js
+}
+
+func DeSerializeBlockHeader(data []byte) *BlockHeader {
+	var m *BlockHeader
+	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
+	return m
+}
+
+func (m *BlockHeader) GetNumber() uint64 {
+	if m != nil {
+		return m.Number
+	}
+	return 0
+}
+
+func (m *BlockHeader) GetPreviousHash() []byte {
+	if m != nil {
+		return m.PreviousHash
+	}
+	return nil
+}
+
+func (m *BlockHeader) GetDataHash() []byte {
+	if m != nil {
+		return m.DataHash
+	}
+	return nil
+}
+
+// This is a array of tansactions
+type BlockData struct {
+	Data [][]byte
+}
+
+func (m *BlockData) Serialize() []byte {
+	js, err := json.Marshal(m)
+	if err != nil {
+		log.Panic(err.Error() + " - " + "BlockData/Serialize")
+	}
+	return js
+}
+
+func DeSerializeBlockData(data []byte) *BlockData {
+	var m *BlockData
+	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
+	return m
+}
+
+func (m *BlockData) GetData() [][]byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+type BlockMetadata struct {
+	Metadata [][]byte
+}
+
+func (m *BlockMetadata) GetMetadata() [][]byte {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
 }

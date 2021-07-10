@@ -211,6 +211,16 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 	}
 }
 
+func BlockCommitmentHandler(w http.ResponseWriter, resp *http.Request, node *Node) {
+	block := common.DeSerializeBlock(resp.Body)
+	blockData := block.GetData()
+	// Have mto do some Checking
+	ok := node.WorldState.UpdateBlock(blockData, int(node.Blockchan.LastHeader.GetNumber()))
+	if ok {
+		node.Blockchan.Update(*block)
+	}
+}
+
 func autheticate(rootCa, peerCa []byte) bool {
 	roots := x509.NewCertPool()
 	ok := roots.AppendCertsFromPEM([]byte(rootCa))
