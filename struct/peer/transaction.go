@@ -2,7 +2,11 @@ package peer
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"log"
 )
 
@@ -22,6 +26,28 @@ type Transaction struct {
 	// The payload is an array of TransactionAction. An array is necessary to
 	// accommodate multiple actions per transaction
 	Actions []*TransactionAction
+	// Validity
+	isvalid bool
+}
+
+func (m *Transaction) VerifySignatures() bool {
+	for _, ta := range m.GetActions() {
+		chaincodeAction := DeSerializeChaincodeActionPayload(ta.GetPayload())
+		signedProp := DeSerializeSignedProposal(bytes.NewBuffer(chaincodeAction.GetChaincodeProposalPayload()))
+		travelerSig := DeSerializeSig(signedProp.TravelerSignature)
+		driverSig := DeSerializeSig(signedProp.DriverSignature)
+
+		travelerV := ecdsa.Verify(Keydecode(signedProp.TravelerPublicKey), Hash(signedProp.GetProposalBytes()), travelerSig.R, travelerSig.S)
+		driverV := ecdsa.Verify(Keydecode(signedProp.DriverPublicKey), Hash(signedProp.GetProposalBytes()), driverSig.R, driverSig.S)
+		if driverV && travelerV {
+			m.isvalid = true
+			return true
+		} else {
+			m.isvalid = false
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Transaction) Serialize() []byte {
@@ -139,4 +165,30 @@ func (m *ChaincodeEndorsedAction) GetEndorsements() []*Endorsement {
 		return m.Endorsements
 	}
 	return nil
+}
+
+// ===========================================================================================
+
+func Keyencode(publicKey *ecdsa.PublicKey) string {
+	x509EncodedPub, _ := x509.MarshalPKIXPublicKey(publicKey)
+	pemEncodedPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: x509EncodedPub})
+	return string(pemEncodedPub)
+}
+
+func Keydecode(pemEncodedPub string) *ecdsa.PublicKey {
+
+	blockPub, _ := pem.Decode([]byte(pemEncodedPub))
+	x509EncodedPub := blockPub.Bytes
+	genericPublicKey, _ := x509.ParsePKIXPublicKey(x509EncodedPub)
+	publicKey := genericPublicKey.(*ecdsa.PublicKey)
+
+	return publicKey
+}
+
+func Hash(b []byte) []byte {
+	h := sha256.New()
+	// hash the body bytes
+	h.Write(b)
+	// compute the SHA256 hash
+	return h.Sum(nil)
 }

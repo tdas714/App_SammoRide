@@ -29,7 +29,7 @@ type Node struct {
 	SentProposal        map[time.Time]*peer.SignedProposal
 	ReceivedEndorsement map[time.Time][]*peer.Endorsement
 	WorldState          *ledger.WorldState
-	Blockchan           *ledger.Blockchain
+	Blockchain          *ledger.Blockchain
 }
 
 func NewNode(InputYml, dir string) *Node {
@@ -61,7 +61,7 @@ func NewNode(InputYml, dir string) *Node {
 	writers := policy.GetWritersPolicy()
 	node := Node{Info: &c, Connection: conn, Certificatepath: cPath, KeyPath: kPath,
 		GossipSentList: gSL, EndorsmentPolicy: endors, WritersPolicy: writers, RootCertificate: rootca, SentProposal: make(map[time.Time]*peer.SignedProposal),
-		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement), WorldState: ledger.Init(), Blockchan: ledger.LoadDatabase(chainPath)}
+		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement), WorldState: ledger.Init(), Blockchain: ledger.LoadDatabase(chainPath)}
 	return &node
 }
 

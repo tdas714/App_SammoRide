@@ -183,7 +183,7 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 						chaincodeEndorsedAction := peer.ChaincodeEndorsedAction{ProposalResponsePayload: proposalRes.GetPayload(),
 							Endorsements: endorsement}
 
-						chaincodeacionPayload := peer.ChaincodeActionPayload{ChaincodeProposalPayload: proposal.GetPayload(),
+						chaincodeacionPayload := peer.ChaincodeActionPayload{ChaincodeProposalPayload: signedProp.Serialize(),
 							Action: &chaincodeEndorsedAction}
 
 						transactionAcion := peer.TransactionAction{Header: proposal.GetHeader(), Payload: chaincodeacionPayload.Serialize()}
@@ -205,11 +205,23 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 func BlockCommitmentHandler(w http.ResponseWriter, resp *http.Request, node *Node) {
 	block := common.DeSerializeBlock(resp.Body)
 	blockData := block.GetData()
-	// Have mto do some Checking
-	ok := node.WorldState.UpdateBlock(blockData, int(node.Blockchan.LastHeader.GetNumber()))
-	if ok {
-		node.Blockchan.Update(*block)
+	var valid bool
+	var data [][]byte
+	for _, d := range blockData.GetData() {
+		t := peer.DeSerializeTransaction(d)
+		valid = t.VerifySignatures()
+		data = append(data, t.Serialize())
 	}
+	blockData = &common.BlockData{Data: data}
+	block.Data = blockData
+	// Check transaction isvalid change
+	// Check Block
+	if valid {
+		node.WorldState.UpdateBlock(blockData, int(node.Blockchain.LastHeader.GetNumber()))
+	}
+	// Send notification to perticipants about the order OR send the block for committing
+	node.Blockchain.Update(*block)
+
 }
 
 func autheticate(rootCa, peerCa []byte) bool {
