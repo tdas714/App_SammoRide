@@ -28,20 +28,21 @@ func main() {
 		} else if strings.Contains(in, "enroll") {
 			node.CreateNode()
 		} else if client.Contains([]string{"1", "2", "3"}, in) {
-			var c client.ClientInfo
+			var c *client.ClientInfo
+			var i client.InputInfo
 			if in == "1" {
-				c.GetConf("ClientInfo/client_1.yml")
+				c, _ = i.Parse("ClientInfo/client_1.yml")
 			} else if in == "2" {
-				c.GetConf("ClientInfo/client_2.yml")
+				c, _ = i.Parse("ClientInfo/client_2.yml")
 			} else if in == "3" {
-				c.GetConf("ClientInfo/client_3.yml")
+				c, _ = i.Parse("ClientInfo/client_3.yml")
 			} else {
 				continue
 			}
 			if node.Info.Port == c.Port {
 				continue
 			}
-			node.SendProposalToRider(c, "Here", "There")
+			node.SendProposalToRider(*c, "Here", "There")
 		} else if strings.Contains(in, "annon") {
 			node.AnnounceAvailability()
 		}

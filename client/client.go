@@ -16,6 +16,18 @@ import (
 	yaml "gopkg.in/yaml.v3"
 )
 
+type InputInfo struct {
+	ClientInfo *ClientInfo `yaml:"Info"`
+	Path       *FilePath   `yaml:"Path"`
+}
+
+type FilePath struct {
+	CertificatePath string `yaml:"CertificatePath"`
+	KeyPath         string `yaml:"KeyPath"`
+	CAsPath         string `yaml:"CAsPath"`
+	UtilsPath       string `yaml:"UtilsPath"`
+}
+
 type ClientInfo struct {
 	Country    string `yaml:"Country"`
 	Name       string `yaml:"Name"`
@@ -27,17 +39,18 @@ type ClientInfo struct {
 	PublicKey  string
 }
 
-func (c *ClientInfo) GetConf(filename string) {
+func (c *InputInfo) Parse(filename string) (*ClientInfo, *FilePath) {
 
 	yamlFile, err := ioutil.ReadFile(filename)
 	CheckErr(err, "YamlFile Get")
 	err = yaml.Unmarshal(yamlFile, c)
 	CheckErr(err, " Unmarshal Error")
+	return c.ClientInfo, c.Path
 
 }
 
 func SendEnrollRequest(country, name, province, city, postC,
-	ipAddr, lPort, serverIp, serverPort string) []string {
+	ipAddr, lPort, serverIp, serverPort string, paths *FilePath) []string {
 	enrollReq := &PeerEnrollDataRequest{Country: country, Name: name, Province: province, IpAddr: ipAddr,
 		City: city, PostalCode: postC, ListingPort: lPort}
 	json_data, err := json.Marshal(enrollReq)
@@ -57,12 +70,17 @@ func SendEnrollRequest(country, name, province, city, postC,
 	VerifyPeer(res.RootCert, res.SenderCert, res.PeerCert)
 	VerifyOrderer(res.RootCert, res.SenderCert)
 	//
-	_ = os.Mkdir("PeerCerts", 0700)
-	_ = os.Mkdir("CAs", 0700)
 
-	err = ioutil.WriteFile("CAs/interCa.crt", res.SenderCert, 0700)
+	interca := fmt.Sprintf("%s/interCa.crt", paths.CAsPath)
+	rootca := fmt.Sprintf("%s/rootCa.crt", paths.CAsPath)
+
+	_ = os.Mkdir(paths.CAsPath, 0700)
+	_ = os.Mkdir(paths.CertificatePath, 0700)
+	_ = os.Mkdir(paths.KeyPath, 0700)
+
+	err = ioutil.WriteFile(interca, res.SenderCert, 0700)
 	CheckErr(err, "SendErollReq/interca")
-	err = ioutil.WriteFile("CAs/rootCa.crt", res.RootCert, 0700)
+	err = ioutil.WriteFile(rootca, res.RootCert, 0700)
 	CheckErr(err, "SendErollReq/rootca")
 
 	blocks, _ := pem.Decode(res.PeerCert)
@@ -70,7 +88,7 @@ func SendEnrollRequest(country, name, province, city, postC,
 		log.Panic("Block is nil")
 	}
 	// Public key
-	certOut, err := os.Create(fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.crt",
+	certOut, err := os.Create(fmt.Sprintf("%s/%s_%s_%s_%s_Cert.crt", paths.CertificatePath,
 		country, name, province,
 		city))
 
@@ -79,7 +97,7 @@ func SendEnrollRequest(country, name, province, city, postC,
 	log.Print("written cert.pem\n")
 
 	// Private Key
-	keyOut, err := os.OpenFile(fmt.Sprintf("PeerCerts/%s_%s_%s_%s_Cert.key",
+	keyOut, err := os.OpenFile(fmt.Sprintf("%s/%s_%s_%s_%s_Cert.key", paths.KeyPath,
 		country, name, province,
 		city),
 		os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
@@ -108,12 +126,15 @@ func createClientConfig(rca, ca, crt, key string) (*tls.Config, error) {
 	}
 
 	roots := x509.NewCertPool()
-	ok := roots.AppendCertsFromPEM(caCertPEM)
+
+	ok := roots.AppendCertsFromPEM(rcaCertPem)
 	if !ok {
 		panic("failed to parse root certificate")
 	}
 
-	ok = roots.AppendCertsFromPEM(rcaCertPem)
+	inters := x509.NewCertPool()
+
+	ok = inters.AppendCertsFromPEM(caCertPEM)
 	if !ok {
 		panic("failed to parse root certificate")
 	}
@@ -124,12 +145,12 @@ func createClientConfig(rca, ca, crt, key string) (*tls.Config, error) {
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    roots,
+		ClientCAs:    inters,
 		RootCAs:      roots, // This Needs ATTENTION
 	}, nil
 }
 
-func StartPeerServer(rcaPath, caPath, crtPath, keyPath string,
+func StartPeerServer(caPath, rcaPath, crtPath, keyPath string,
 	node *Node) {
 
 	arrivalTime := 10

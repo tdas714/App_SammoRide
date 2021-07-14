@@ -1,7 +1,14 @@
-Country: "India"
-Name : "Tapas.Das"
-Province: "WestBengal"
-City : "Kolkata"
-IP : "127.0.0.1"
-Port: "2000"
-PostalCode: "700028"
+Info:
+  Country: "India"
+  Name : "Tapas.Das"
+  Province: "WestBengal"
+  City : "Kolkata"
+  IP : "127.0.0.1"
+  Port: "2000"
+  PostalCode: "700028"
+
+Path:
+  CertificatePath: "ClientCert1"
+  KeyPath: "ClientCert1"
+  CAsPath: "ClientCert1/CAs"
+  UtilsPath: "UtilsClient1"

@@ -142,7 +142,10 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 						endorcer := peer.Endorsement{Endorser: certPem, Signature: &sig, PublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey)}
 						proposalRes.Endorsement = &endorcer
 						fmt.Println("sending signed endorsement: ", chaincodeProp.IP, chaincodeProp.Port)
-						SendData("CAs/rootCa.crt",
+
+						rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
+
+						SendData(rootca,
 							node.Certificatepath, node.KeyPath, chaincodeProp.IP, chaincodeProp.Port,
 							"Traveler/SignedEndorsement", proposalRes.Serialize(), 2)
 					}
@@ -176,7 +179,8 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 						}
 					}
 					endorsement = append(endorsement, proposalRes.Endorsement)
-					if len(endorsement) >= 1 {
+
+					if node.EndorsementPolicy.Verify(int32(len(endorsement)), node.NumberOfEndorsers.GetSignedBy()) {
 						fmt.Println("Got endorsement")
 						proposal := peer.DeSerializeProposal(signedProp.GetProposalBytes())
 
@@ -190,8 +194,10 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 
 						transaction := peer.Transaction{Actions: []*peer.TransactionAction{&transactionAcion}}
 
+						rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
+
 						// SENDING TRANSACTION  TO ORDER FOR BLOCK CONSTRACTION
-						SendData("CAs/rootCa.crt",
+						SendData(rootca,
 							node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
 							"TransactionCommitmentRequest", transaction.Serialize(), 2)
 						fmt.Println("Sent  to orderer")
