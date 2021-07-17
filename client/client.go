@@ -50,7 +50,7 @@ func (c *InputInfo) Parse(filename string) (*ClientInfo, *FilePath) {
 }
 
 func SendEnrollRequest(country, name, province, city, postC,
-	ipAddr, lPort, serverIp, serverPort string, paths *FilePath) []string {
+	ipAddr, lPort, serverIp, serverPort string, paths *FilePath) ([]string, []string) {
 	enrollReq := &PeerEnrollDataRequest{Country: country, Name: name, Province: province, IpAddr: ipAddr,
 		City: city, PostalCode: postC, ListingPort: lPort}
 	json_data, err := json.Marshal(enrollReq)
@@ -110,7 +110,7 @@ func SendEnrollRequest(country, name, province, city, postC,
 	}
 	log.Print("wrote key.pem\n")
 
-	return res.PeerList
+	return res.PeerList, res.OrdererList
 }
 
 // ====================================
@@ -160,7 +160,7 @@ func StartPeerServer(caPath, rcaPath, crtPath, keyPath string,
 	// 	GossipHandler(rw, r, node.Info.Name)
 	// }) //This can be diffrent for diffrent data types
 
-	defer node.Connection.Close()
+	defer node.Close()
 
 	http.HandleFunc("/Announcement/rider", func(rw http.ResponseWriter, r *http.Request) {
 		RiderAHandler(rw, r, node)

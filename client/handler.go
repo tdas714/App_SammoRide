@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/x509"
 	"fmt"
 	"io/ioutil"
-	"log"
 	random "math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/App-SammoRide/chaincodes/ride_1_0"
@@ -21,7 +20,7 @@ func RiderAHandler(w http.ResponseWriter, r *http.Request,
 	node *Node) {
 
 	riderA := RADeserialize(r.Body)
-	node.Connection.Add([]string{riderA.Info.IP + ":" + riderA.Info.Port})
+	node.Connection.AddPeer([]string{riderA.Info.IP + ":" + riderA.Info.Port})
 	node.Gossip(riderA.Header, 1, riderA.RASerialize(), riderA.Info.IP, "Announcement/rider")
 
 	fmt.Print("Rider Announcment from: ", riderA.Info.IP+":"+riderA.Info.Port)
@@ -50,7 +49,7 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 		// Note txId
 		headerbytes := proposal.GetHeader()
 		header := common.DeSerializeHeader(headerbytes)
-		if header.ChannelHeader.ChannelId != string(common.Ride) {
+		if header.ChannelHeader.ChannelId != string(common.Ride) && header.ChannelHeader.Epoch != node.Blockchain.LastHeader.Number {
 			return
 		}
 		header.SignatureHeader.Driver = certPem
@@ -61,7 +60,7 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 		chaincodepayload := peer.DeSerializeChaincodeProposalPayload(proposal.GetPayload())
 		chaincodepayload.Input.ArrivalTime = time.Minute * time.Duration(arriveTime)
 		chaincodepayload.Input.RideFair = rideFair
-		chaincodepayload.Timeout = time.Duration(time.Minute * 2)
+		chaincodepayload.Timeout = time.Duration(time.Minute * 2) //Have to change per policy
 
 		fmt.Println(header)
 		fmt.Println(chaincodepayload)
@@ -99,8 +98,9 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 
 		// certPem, err := ioutil.ReadFile(node.Certificatepath)
 		// CheckErr(err, "OrderProposalhandler/CertPem")
+		interca := fmt.Sprintf("%s/interCa.crt", node.Paths.CAsPath)
 
-		interPem, err := ioutil.ReadFile("CAs/interCa.crt")
+		interPem, err := ioutil.ReadFile(interca)
 		CheckErr(err, "Interca")
 
 		proposal := peer.DeSerializeProposal(signedProposal.ProposalBytes)
@@ -196,11 +196,18 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 
 						rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 
-						// SENDING TRANSACTION  TO ORDER FOR BLOCK CONSTRACTION
-						SendData(rootca,
-							node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
-							"TransactionCommitmentRequest", transaction.Serialize(), 2)
-						fmt.Println("Sent  to orderer")
+						var splited []string
+						for _, o := range node.Connection.GetRandomOrderer(1) {
+							splited = strings.Split(o, ":")
+							// SENDING TRANSACTION  TO ORDER FOR BLOCK CONSTRACTION
+							SendData(rootca,
+								node.Certificatepath, node.KeyPath, splited[0], "8443",
+								"TransactionCommitmentRequest", transaction.Serialize(), 2)
+							fmt.Println("Sent  to orderer")
+
+						}
+
+						node.ReceivedEndorsement = make(map[time.Time][]*peer.Endorsement)
 					}
 				}
 			}
@@ -228,28 +235,6 @@ func BlockCommitmentHandler(w http.ResponseWriter, resp *http.Request, node *Nod
 	// Send notification to perticipants about the order OR send the block for committing
 	node.Blockchain.Update(*block)
 
-}
-
-func autheticate(rootCa, peerCa []byte) bool {
-	roots := x509.NewCertPool()
-	ok := roots.AppendCertsFromPEM([]byte(rootCa))
-	if !ok {
-		panic("failed to parse root certificate")
-	}
-
-	cert := LoadCertificate(peerCa)
-	// CheckErr(err, "VerifyOrderer/ParseCert")
-
-	opts := x509.VerifyOptions{
-		Roots: roots,
-	}
-
-	if _, err := cert.Verify(opts); err != nil {
-		return false
-		// panic("failed to verify certificate: " + err.Error())
-	}
-	log.Print("Peer Verified")
-	return true
 }
 
 func Eq(a, b []interface{}) bool {

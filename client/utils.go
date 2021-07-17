@@ -35,13 +35,14 @@ type PeerEnrollDataRequest struct {
 }
 
 type PeerEnrollDataResponse struct {
-	Header     string
-	IpAddr     string
-	PeerCert   []byte
-	PrivateKey []byte
-	SenderCert []byte
-	RootCert   []byte
-	PeerList   []string
+	Header      string
+	IpAddr      string
+	PeerCert    []byte
+	PrivateKey  []byte
+	SenderCert  []byte
+	RootCert    []byte
+	PeerList    []string
+	OrdererList []string
 }
 
 type RiderAnnouncement struct {
@@ -151,8 +152,9 @@ func RADeserialize(data io.Reader) *RiderAnnouncement {
 }
 
 type Connections struct {
-	Path     string
-	PeerList []string
+	Path        string
+	PeerList    []string
+	OrdererList []string
 }
 
 func LoadConnections(path string) *Connections {
@@ -175,7 +177,7 @@ func ConnDeserialize(data []byte) *Connections {
 	return &conn
 }
 
-func (c *Connections) Add(pLIst []string) {
+func (c *Connections) AddPeer(pLIst []string) {
 	for _, p := range pLIst {
 		if !Contains(c.PeerList, p) {
 			if !strings.Contains(p, ":") {
@@ -187,11 +189,23 @@ func (c *Connections) Add(pLIst []string) {
 	}
 }
 
+func (c *Connections) AddOrderer(oLIst []string) {
+	for _, p := range oLIst {
+		if !Contains(c.OrdererList, p) {
+			if !strings.Contains(p, ":") {
+				p += ":8443"
+			}
+			c.PeerList = append(c.OrdererList, p)
+		}
+
+	}
+}
+
 func (c *Connections) len() int {
 	return len(c.PeerList)
 }
 
-func (c *Connections) GetRandom(num int) []string {
+func (c *Connections) GetRandomPeer(num int) []string {
 	var gList []string
 	var selectedPeer string
 	// Make sure there are two diffrent ips, not source
@@ -200,6 +214,26 @@ func (c *Connections) GetRandom(num int) []string {
 	for {
 		rand.Seed(int64(i) + time.Now().Unix())
 		selectedPeer = c.PeerList[rand.Intn(len(c.PeerList))]
+		if !Contains(gList, selectedPeer) {
+			gList = append(gList, selectedPeer)
+		}
+		if len(gList) >= num || i >= c.len() {
+			break
+		}
+		i++
+	}
+	return gList
+}
+
+func (c *Connections) GetRandomOrderer(num int) []string {
+	var gList []string
+	var selectedPeer string
+	// Make sure there are two diffrent ips, not source
+	i := 1
+
+	for {
+		rand.Seed(int64(i) + time.Now().Unix())
+		selectedPeer = c.OrdererList[rand.Intn(len(c.OrdererList))]
 		if !Contains(gList, selectedPeer) {
 			gList = append(gList, selectedPeer)
 		}

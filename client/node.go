@@ -69,15 +69,18 @@ func NewNode(InputYml, dir string) *Node {
 
 func (node *Node) Close() {
 	node.Connection.Close()
+	node.Blockchain.Close()
+	node.WorldState.Close(node.Paths.UtilsPath + "/WorldState.json")
 }
 
 func (node *Node) CreateNode() {
-	// This will return Peer-list
-	plist := SendEnrollRequest(node.Info.Country, node.Info.Name,
+	// This will return Peer-list and ordererlist
+	plist, olist := SendEnrollRequest(node.Info.Country, node.Info.Name,
 		node.Info.Province, node.Info.City, node.Info.Postalcode,
 		node.Info.IP, node.Info.Port, "127.0.0.1", "8080", node.Paths) //<--This will be dynamic
 
-	node.Connection.Add(plist)
+	node.Connection.AddPeer(plist)
+	node.Connection.AddOrderer(olist)
 	node.Connection.Close()
 }
 
@@ -107,7 +110,7 @@ func (node *Node) AnnounceAvailability() {
 
 func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 
-	node.Connection.Add([]string{c.IP})
+	node.Connection.AddPeer([]string{c.IP})
 
 	fmt.Println("Sending proposal to: ", c.IP, " ", c.Port)
 
@@ -122,7 +125,7 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 	h := string(hash(tbyte))
 	random.Seed(time.Now().Unix())
 
-	cheader := common.ChannelHeader{ChannelId: string(common.Ride), TxId: h, Epoch: 1} // Change epoch based on block height
+	cheader := common.ChannelHeader{ChannelId: string(common.Ride), TxId: h, Epoch: node.Blockchain.LastHeader.Number} // Change epoch based on block height
 	sheader := common.SignatureHeader{Traveler: certPem, TravelerNonce: IntToByteArray(random.Int63())}
 	Header := common.Header{ChannelHeader: &cheader, SignatureHeader: &sheader}
 	propPayload := peer.ChaincodeProposalPayload{ChaincodeId: &peer.ChaincodeID{Name: "ride", Version: "1.0"},
@@ -177,7 +180,7 @@ func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal, c Clie
 
 		rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 		var splited []string
-		endorsList := node.Connection.GetRandom(int(node.NumberOfEndorsers.GetSignedBy()))
+		endorsList := node.Connection.GetRandomPeer(int(node.NumberOfEndorsers.GetSignedBy()))
 		for _, endor := range endorsList {
 			splited = strings.Split(endor, ":")
 			fmt.Println(splited)
@@ -188,18 +191,52 @@ func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal, c Clie
 	}
 }
 
+func (node *Node) GetSnapshot(numSnap int64) {
+
+	rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
+	var resp []byte
+	var splited []string
+	for _, o := range node.Connection.GetRandomOrderer(1) {
+		splited = strings.Split(o, ":")
+
+		resp = SendData(rootca,
+			node.Certificatepath, node.KeyPath, splited[0], "8443",
+			"Request/BlockSnapshot", IntToByteArray(numSnap), 2)
+
+	}
+
+	snapsEnv := common.DeSerializeSnapshotEnvelop(resp)
+
+	if snapsEnv.Verify() {
+		snapsBlocks := common.DeSerializeSnapshotBlocks(snapsEnv.Data)
+		for _, block := range snapsBlocks.Blocks {
+			if node.WorldState.UpdateBlock(block.GetData(), int(node.Blockchain.LastHeader.Number)) {
+				node.Blockchain.Update(*block)
+			}
+		}
+	}
+}
+
 func (node *Node) Gossip(header int64, num int, data []byte, ipAddr, domain string) {
 	_, ok := node.GossipSentList[header]
 	if !ok {
 		var splited []string
-		pList := node.Connection.GetRandom(num)
+		rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
+		pList := node.Connection.GetRandomPeer(num)
 		for _, p := range pList {
 			if !strings.Contains(p, node.Info.IP+":"+node.Info.Port) {
 				splited = strings.Split(p, ":")
-				SendData("CAs/rootCa.crt",
+				SendData(rootca,
 					node.Certificatepath, node.KeyPath, splited[0], splited[1],
 					domain, data, 1)
 			}
+		}
+		for _, o := range node.Connection.OrdererList {
+			splited = strings.Split(o, ":")
+			SendData(rootca,
+				node.Certificatepath, node.KeyPath, splited[0], "8443",
+				domain, data, 1)
+
 		}
 		node.GossipSentList[header] = ipAddr
 	}

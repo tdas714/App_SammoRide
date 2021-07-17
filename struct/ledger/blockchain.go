@@ -43,6 +43,10 @@ func (chain *Blockchain) InitBlockchain(filepath string) {
 	chain.Database = db
 }
 
+func (chain *Blockchain) Close() {
+	chain.Database.Close()
+}
+
 func (chain *Blockchain) Update(block common.Block) {
 	err := chain.Database.Update(func(txn *badger.Txn) error {
 		err := txn.Set(block.GetHeader().Serialize(), block.Serialize())

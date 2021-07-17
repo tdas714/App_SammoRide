@@ -2,10 +2,13 @@ package common
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"encoding/json"
 	"io"
 	"log"
 	"time"
+
+	"github.com/App-SammoRide/struct/peer"
 )
 
 type ChannelID string
@@ -260,4 +263,46 @@ func (m *BlockMetadata) GetMetadata() [][]byte {
 		return m.Metadata
 	}
 	return nil
+}
+
+type SnapshotBlocks struct {
+	Blocks []*Block // Chaneg it to [][]byte
+}
+
+func (m *SnapshotBlocks) Serialize() []byte {
+	js, err := json.Marshal(m)
+	if err != nil {
+		log.Panic(err.Error() + " - " + "SnapshotBlocks/Serialize")
+	}
+	return js
+}
+
+func DeSerializeSnapshotBlocks(data []byte) *SnapshotBlocks {
+	var m *SnapshotBlocks
+	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
+	return m
+}
+
+type SnapshotEnvelop struct {
+	Data      []byte
+	Signature *peer.Sig
+	PublicKey string
+}
+
+func (m *SnapshotEnvelop) Verify() bool {
+	return ecdsa.Verify(peer.Keydecode(m.PublicKey), peer.Hash(m.Data), m.Signature.R, m.Signature.S)
+}
+
+func (m *SnapshotEnvelop) Serialize() []byte {
+	js, err := json.Marshal(m)
+	if err != nil {
+		log.Panic(err.Error() + " - " + "SnapshotEnvelop/Serialize")
+	}
+	return js
+}
+
+func DeSerializeSnapshotEnvelop(data []byte) *SnapshotEnvelop {
+	var m *SnapshotEnvelop
+	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
+	return m
 }

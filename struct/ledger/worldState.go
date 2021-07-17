@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
+	"os"
 
 	"github.com/App-SammoRide/struct/common"
 	"github.com/App-SammoRide/struct/peer"
@@ -58,6 +59,17 @@ func Init() *WorldState {
 	currentState["Init"] = state.Serialize()
 	ws := &WorldState{CurrentState: currentState}
 	return ws
+}
+
+func (ws *WorldState) Close(filename string) {
+	jsonData, err := json.Marshal(ws.CurrentState)
+	CheckErr(err, "WorldState/Close")
+	jsonFile, err := os.Create(filename)
+	CheckErr(err, "WorldState/JsonFile")
+	defer jsonFile.Close()
+	jsonFile.Write(jsonData)
+	jsonFile.Close()
+
 }
 
 func (ws *WorldState) Update(key string, value []byte, isdelete bool) {
