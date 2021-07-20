@@ -43,7 +43,7 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 	proposalbytes := signedprop.GetProposalBytes()
 	v := ecdsa.Verify(Keydecode(signedprop.TravelerPublicKey), hash(proposalbytes), travelerSig.R, travelerSig.S)
 
-	if v {
+	if v && node.ActivityStatus == FREE {
 		proposal := peer.DeSerializeProposal(proposalbytes)
 		// Check Pickup location and Destination location + arival diatance
 		// Note txId
@@ -61,6 +61,8 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 		chaincodepayload.Input.ArrivalTime = time.Minute * time.Duration(arriveTime)
 		chaincodepayload.Input.RideFair = rideFair
 		chaincodepayload.Timeout = time.Duration(time.Minute * 2) //Have to change per policy
+		chaincodepayload.IPs = append(chaincodepayload.IPs, node.Info.IP)
+		chaincodepayload.Ports = append(chaincodepayload.Ports, node.Info.Port)
 
 		fmt.Println(header)
 		fmt.Println(chaincodepayload)
@@ -80,6 +82,7 @@ func TravelerOrderProposalHandler(w http.ResponseWriter, resp *http.Request,
 
 		// // fmt.Println(signedprop)
 		w.Write(sendSignedprop.Serialize())
+		node.ActivityStatus = NEGOTIATING
 	}
 }
 
@@ -119,9 +122,9 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 
 					fmt.Println("Invoke Chancode: ", chaincodeProp.ChaincodeId.GetName(), chaincodeProp.ChaincodeId.GetVersion())
 					if chaincodeProp.ChaincodeId.GetName() == "ride" && chaincodeProp.ChaincodeId.GetVersion() == "1.0" {
-						rwset, events, status := ride_1_0.StartRide(chaincodeProp.Input.PickupLocation, chaincodeProp.Input.DestinationLocation,
+						rwset, events, status := ride_1_0.Execute(chaincodeProp.Input.PickupLocation, chaincodeProp.Input.DestinationLocation,
 							chaincodeProp.Input.RideFair, header.ChannelHeader.TxId, signedProposal.DriverPublicKey,
-							signedProposal.TravelerPublicKey, chaincodeProp.ChaincodeId)
+							signedProposal.TravelerPublicKey, chaincodeProp.ChaincodeId, chaincodeProp.Input.ArrivalTime, header.ChannelHeader.Timestamp)
 
 						chainAction := peer.ChaincodeAction{Results: rwset, Events: events, ChaincodeId: chaincodeProp.ChaincodeId}
 						proposalResPayload := peer.ProposalResponsePayload{ProposalHash: hash(signedProposal.GetProposalBytes()), Extension: &chainAction}
@@ -141,12 +144,12 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 
 						endorcer := peer.Endorsement{Endorser: certPem, Signature: &sig, PublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey)}
 						proposalRes.Endorsement = &endorcer
-						fmt.Println("sending signed endorsement: ", chaincodeProp.IP, chaincodeProp.Port)
+						fmt.Println("sending signed endorsement: ", chaincodeProp.IPs[0], chaincodeProp.Ports[0])
 
 						rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 
 						SendData(rootca,
-							node.Certificatepath, node.KeyPath, chaincodeProp.IP, chaincodeProp.Port,
+							node.Certificatepath, node.KeyPath, chaincodeProp.IPs[0], chaincodeProp.Ports[0],
 							"Traveler/SignedEndorsement", proposalRes.Serialize(), 2)
 					}
 				}
@@ -208,6 +211,7 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 						}
 
 						node.ReceivedEndorsement = make(map[time.Time][]*peer.Endorsement)
+						node.ActivityStatus = ENGAGED
 					}
 				}
 			}
@@ -218,23 +222,51 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 func BlockCommitmentHandler(w http.ResponseWriter, resp *http.Request, node *Node) {
 	block := common.DeSerializeBlock(resp.Body)
 	blockData := block.GetData()
-	var valid bool
+	// var valid bool
 	var data [][]byte
+	rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
+
 	for _, d := range blockData.GetData() {
 		t := peer.DeSerializeTransaction(d)
-		valid = t.VerifySignatures()
+		t.VerifySignatures()
+
+		var ips, ports []string
+		for _, ta := range t.GetActions() {
+			chaincodeAction := peer.DeSerializeChaincodeActionPayload(ta.GetPayload())
+			chaincodeProp := peer.DeSerializeChaincodeProposalPayload(chaincodeAction.GetChaincodeProposalPayload())
+			ips = chaincodeProp.IPs
+			ports = chaincodeProp.Ports
+		}
+		for i := range ips {
+			SendData(rootca,
+				node.Certificatepath, node.KeyPath, ips[i], ports[i],
+				"Committment/notification", block.Serialize(), 2)
+		}
 		data = append(data, t.Serialize())
 	}
 	blockData = &common.BlockData{Data: data}
 	block.Data = blockData
 	// Check transaction isvalid change
 	// Check Block
-	if valid {
-		node.WorldState.UpdateBlock(blockData, int(node.Blockchain.LastHeader.GetNumber()))
-	}
+
+	node.WorldState.UpdateBlock(blockData, int(node.Blockchain.LastHeader.GetNumber()))
 	// Send notification to perticipants about the order OR send the block for committing
 	node.Blockchain.Update(*block)
 
+}
+
+func TXCommittmentCounter(w http.ResponseWriter, resp *http.Request, node *Node) {
+	// Meta data of this response is hash commited transaction
+	tx := peer.DeSerializeTransaction(StreamToByte(resp.Body))
+	if tx.Isvalid {
+		node.CommittmentCounter += 1
+	} else {
+		node.CommittmentCounter -= 1
+	}
+
+	if node.EndorsementPolicy.Verify(int32(node.CommittmentCounter), node.NumberOfEndorsers.GetSignedBy()) {
+		node.ActivityStatus = ENGAGED
+	}
 }
 
 func Eq(a, b []interface{}) bool {

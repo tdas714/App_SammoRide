@@ -27,7 +27,7 @@ type Transaction struct {
 	// accommodate multiple actions per transaction
 	Actions []*TransactionAction
 	// Validity
-	isvalid bool
+	Isvalid bool
 }
 
 func (m *Transaction) VerifySignatures() bool {
@@ -40,10 +40,10 @@ func (m *Transaction) VerifySignatures() bool {
 		travelerV := ecdsa.Verify(Keydecode(signedProp.TravelerPublicKey), Hash(signedProp.GetProposalBytes()), travelerSig.R, travelerSig.S)
 		driverV := ecdsa.Verify(Keydecode(signedProp.DriverPublicKey), Hash(signedProp.GetProposalBytes()), driverSig.R, driverSig.S)
 		if driverV && travelerV {
-			m.isvalid = true
+			m.Isvalid = true
 			return true
 		} else {
-			m.isvalid = false
+			m.Isvalid = false
 			return false
 		}
 	}

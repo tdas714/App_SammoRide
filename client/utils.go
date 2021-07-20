@@ -275,3 +275,9 @@ func Keydecode(pemEncodedPub string) *ecdsa.PublicKey {
 
 	return publicKey
 }
+
+func StreamToByte(stream io.Reader) []byte {
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(stream)
+	return buf.Bytes()
+}

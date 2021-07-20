@@ -72,6 +72,13 @@ func (m *ProposalResponse) GetEndorsement() *Endorsement {
 	return nil
 }
 
+type ResponseType int32
+
+var (
+	COMMITTED ResponseType = 0
+	REJECTED  ResponseType = 1
+)
+
 // A response with a representation similar to an HTTP response that can
 // be used within another message.
 type Response struct {

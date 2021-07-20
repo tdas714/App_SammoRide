@@ -10,26 +10,8 @@ import (
 	"github.com/App-SammoRide/struct/peer"
 )
 
-type StateValue struct {
-	Value map[string]interface{}
-}
-
-func (m *StateValue) Serialize() []byte {
-	js, err := json.Marshal(m)
-	if err != nil {
-		log.Panic(err.Error() + " - " + "StateValue/Serialize")
-	}
-	return js
-}
-
-func DeSerializeStateValue(data []byte) *StateValue {
-	var m *StateValue
-	json.NewDecoder(bytes.NewBuffer(data)).Decode(&m)
-	return m
-}
-
 type State struct {
-	StateValue []byte
+	StateValue map[string]string
 	Version    int
 }
 
@@ -52,9 +34,9 @@ type WorldState struct {
 }
 
 func Init() *WorldState {
-	value := make(map[string]interface{})
-	statev := StateValue{Value: value}
-	state := State{StateValue: statev.Serialize(), Version: 0}
+	value := make(map[string]string)
+	// statev := StateValue{Value: value}
+	state := State{StateValue: value, Version: 0}
 	currentState := make(map[string][]byte)
 	currentState["Init"] = state.Serialize()
 	ws := &WorldState{CurrentState: currentState}
@@ -72,7 +54,7 @@ func (ws *WorldState) Close(filename string) {
 
 }
 
-func (ws *WorldState) Update(key string, value []byte, isdelete bool) {
+func (ws *WorldState) Update(key string, value map[string]string, isdelete bool) {
 	statebytes, ok := ws.CurrentState[key]
 	if ok {
 		if isdelete {

@@ -66,7 +66,7 @@ func (m *KVRead) GetVersion() *Version {
 type KVWrite struct {
 	Key      string
 	IsDelete bool
-	Value    []byte
+	Value    map[string]string
 }
 
 func (m *KVWrite) GetKey() string {
@@ -83,7 +83,7 @@ func (m *KVWrite) GetIsDelete() bool {
 	return false
 }
 
-func (m *KVWrite) GetValue() []byte {
+func (m *KVWrite) GetValue() map[string]string {
 	if m != nil {
 		return m.Value
 	}

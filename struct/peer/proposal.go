@@ -183,8 +183,8 @@ type ChaincodeProposalPayload struct {
 	ChaincodeId *ChaincodeID
 	Input       *ChaincodeInput
 	Timeout     time.Duration
-	IP          string
-	Port        string
+	IPs         []string
+	Ports       []string
 }
 
 func (m *ChaincodeProposalPayload) Serialize() []byte {

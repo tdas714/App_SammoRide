@@ -16,6 +16,14 @@ import (
 	"github.com/App-SammoRide/struct/peer"
 )
 
+type ActivityType int32
+
+const (
+	FREE        ActivityType = 0
+	NEGOTIATING ActivityType = 1
+	ENGAGED     ActivityType = 2
+)
+
 type Node struct {
 	Info                *ClientInfo
 	Paths               *FilePath
@@ -26,10 +34,12 @@ type Node struct {
 	GossipSentList      map[int64]string
 	SentProposal        map[time.Time]*peer.SignedProposal
 	ReceivedEndorsement map[time.Time][]*peer.Endorsement
+	CommittmentCounter  int
 	WorldState          *ledger.WorldState
 	Blockchain          *ledger.Blockchain
 	EndorsementPolicy   *common.ImplicitMetaPolicy
 	NumberOfEndorsers   *common.SignaturePolicy
+	ActivityStatus      ActivityType
 }
 
 func NewNode(InputYml, dir string) *Node {
@@ -62,7 +72,7 @@ func NewNode(InputYml, dir string) *Node {
 		GossipSentList: gSL, RootCertificate: rootca, SentProposal: make(map[time.Time]*peer.SignedProposal),
 		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement), WorldState: ledger.Init(), Blockchain: ledger.LoadDatabase(chainPath),
 		EndorsementPolicy: &common.ImplicitMetaPolicy{SubPolicy: common.Policy_PolicyType_name[1], Rule: common.ImplicitMetaPolicy_MAJORITY},
-		NumberOfEndorsers: &common.SignaturePolicy{Type: &common.SignaturePolicy_SignedBy{SignedBy: 3}}}
+		NumberOfEndorsers: &common.SignaturePolicy{Type: &common.SignaturePolicy_SignedBy{SignedBy: 3}}, ActivityStatus: FREE}
 
 	return &node
 }
@@ -105,6 +115,7 @@ func (node *Node) AnnounceAvailability() {
 		node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
 		"Announcement/rider", riderA.RASerialize(), 2)
 	fmt.Println("Annoncement Sent")
+	node.ActivityStatus = FREE
 
 }
 
@@ -129,7 +140,7 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 	sheader := common.SignatureHeader{Traveler: certPem, TravelerNonce: IntToByteArray(random.Int63())}
 	Header := common.Header{ChannelHeader: &cheader, SignatureHeader: &sheader}
 	propPayload := peer.ChaincodeProposalPayload{ChaincodeId: &peer.ChaincodeID{Name: "ride", Version: "1.0"},
-		Input: &peer.ChaincodeInput{PickupLocation: pickup, DestinationLocation: des}, IP: node.Info.IP, Port: node.Info.Port}
+		Input: &peer.ChaincodeInput{PickupLocation: pickup, DestinationLocation: des}, IPs: []string{node.Info.IP}, Ports: []string{node.Info.Port}}
 
 	proposal := peer.Proposal{Header: Header.Serialize(), Payload: propPayload.Serialize()}
 
@@ -166,6 +177,7 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 		// Send this to endrosers as per endorcement policy
 		node.SentProposal[header.ChannelHeader.Timestamp] = RespSignedProp
 		node.SendProposalToEndorser(RespSignedProp, c)
+		node.ActivityStatus = NEGOTIATING
 	}
 
 }
@@ -188,6 +200,7 @@ func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal, c Clie
 				node.Certificatepath, node.KeyPath, c.IP, "4000",
 				"Endorcers/SignedProposal", signedProp.Serialize(), 2)
 		}
+		node.ActivityStatus = ENGAGED
 	}
 }
 
