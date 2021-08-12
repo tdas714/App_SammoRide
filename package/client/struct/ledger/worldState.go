@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/App-SammoRide/struct/common"
-	"github.com/App-SammoRide/struct/peer"
+	"github.com/App-SammoRide/package/client/struct/common"
+	"github.com/App-SammoRide/package/client/struct/peer"
 )
 
 type State struct {

@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/App-SammoRide/struct/common"
-	"github.com/App-SammoRide/struct/peer"
+	"github.com/App-SammoRide/package/client/struct/common"
+	"github.com/App-SammoRide/package/client/struct/peer"
 )
 
 type RideType int32

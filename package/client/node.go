@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/App-SammoRide/struct/common"
-	"github.com/App-SammoRide/struct/ledger"
-	"github.com/App-SammoRide/struct/peer"
+	"github.com/App-SammoRide/package/client/struct/common"
+	"github.com/App-SammoRide/package/client/struct/ledger"
+	"github.com/App-SammoRide/package/client/struct/peer"
 )
 
 type ActivityType int32
@@ -44,7 +44,10 @@ type Node struct {
 
 func NewNode(InputYml, dir string) *Node {
 	var i InputInfo
-	c, paths := i.Parse(InputYml)
+	i.Parse(InputYml)
+
+	c := i.ClientInfo
+	paths := i.Path
 
 	// filepath := fmt.Sprintf("../%s/%s", dir, strings.Split(c.Name, ".")[0])
 	// CreateDirIfNotExist(filepath)
@@ -87,7 +90,7 @@ func (node *Node) CreateNode() {
 	// This will return Peer-list and ordererlist
 	plist, olist := SendEnrollRequest(node.Info.Country, node.Info.Name,
 		node.Info.Province, node.Info.City, node.Info.Postalcode,
-		node.Info.IP, node.Info.Port, "127.0.0.1", "8080", node.Paths) //<--This will be dynamic
+		node.Info.IP, node.Info.Port, "192.168.0.5", "8080", node.Paths) //<--This will be dynamic
 
 	node.Connection.AddPeer(plist)
 	node.Connection.AddOrderer(olist)
@@ -101,6 +104,7 @@ func (node *Node) JoinNetwork() {
 	StartPeerServer(interca, rootca,
 		node.Certificatepath, node.KeyPath, node)
 	fmt.Println("Server Listing in port: ", node.Info.Port)
+	node.ActivityStatus = FREE
 }
 
 func (node *Node) AnnounceAvailability() {
@@ -110,12 +114,16 @@ func (node *Node) AnnounceAvailability() {
 	rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 
 	riderA := RiderAnnouncement{Header: time.Now().Unix(), Latitude: "lat", Longitude: "long", Avalability: "avail", Info: node.Info}
-
-	SendData(rootca,
-		node.Certificatepath, node.KeyPath, "127.0.0.1", "8443",
-		"Announcement/rider", riderA.RASerialize(), 2)
+	var splited []string
+	if node.ActivityStatus == FREE {
+		for _, o := range node.Connection.GetRandomOrderer(1) {
+			splited = strings.Split(o, ":")
+			SendData(rootca,
+				node.Certificatepath, node.KeyPath, splited[0], splited[1],
+				"Announcement/rider", riderA.RASerialize(), 2)
+		}
+	}
 	fmt.Println("Annoncement Sent")
-	node.ActivityStatus = FREE
 
 }
 

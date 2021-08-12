@@ -3,10 +3,6 @@
 		{
 			"name": "sammoRide",
 			"path": "../sammoRide"
-		},
-		{
-			"name": "App-SammoRide",
-			"path": "."
 		}
 	],
 	"settings": {}

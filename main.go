@@ -7,7 +7,7 @@ import (
 
 	// ride "github.com/App-SammoRide/chaincodes/Ride"
 
-	"github.com/App-SammoRide/client"
+	"github.com/App-SammoRide/package/client"
 	// "github.com/App-SammoRide/node"
 )
 
@@ -31,14 +31,15 @@ func main() {
 			var c *client.ClientInfo
 			var i client.InputInfo
 			if in == "1" {
-				c, _ = i.Parse("ClientInfo/client_1.yml")
+				i.Parse("ClientInfo/client_1.yml")
 			} else if in == "2" {
-				c, _ = i.Parse("ClientInfo/client_2.yml")
+				i.Parse("ClientInfo/client_2.yml")
 			} else if in == "3" {
-				c, _ = i.Parse("ClientInfo/client_3.yml")
+				i.Parse("ClientInfo/client_3.yml")
 			} else {
 				continue
 			}
+			c = i.ClientInfo
 			if node.Info.Port == c.Port {
 				continue
 			}

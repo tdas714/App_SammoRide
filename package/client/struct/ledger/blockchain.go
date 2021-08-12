@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/App-SammoRide/struct/common"
-	"github.com/App-SammoRide/struct/peer"
+	"github.com/App-SammoRide/package/struct/common"
+	"github.com/App-SammoRide/package/struct/peer"
 	"github.com/dgraph-io/badger/v3"
 )
 

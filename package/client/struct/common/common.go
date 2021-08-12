@@ -8,7 +8,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/App-SammoRide/struct/peer"
+	"github.com/App-SammoRide/package/client/struct/peer"
 )
 
 type ChannelID string

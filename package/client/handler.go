@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/App-SammoRide/chaincodes/ride_1_0"
-	"github.com/App-SammoRide/struct/common"
-	"github.com/App-SammoRide/struct/peer"
+	"github.com/App-SammoRide/package/client/chaincodes/ride_1_0"
+	"github.com/App-SammoRide/package/client/struct/common"
+	"github.com/App-SammoRide/package/client/struct/peer"
 )
 
 func RiderAHandler(w http.ResponseWriter, r *http.Request,

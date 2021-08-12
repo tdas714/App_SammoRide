@@ -39,14 +39,12 @@ type ClientInfo struct {
 	PublicKey  string
 }
 
-func (c *InputInfo) Parse(filename string) (*ClientInfo, *FilePath) {
+func (c *InputInfo) Parse(filename string) {
 
 	yamlFile, err := ioutil.ReadFile(filename)
 	CheckErr(err, "YamlFile Get")
 	err = yaml.Unmarshal(yamlFile, c)
 	CheckErr(err, " Unmarshal Error")
-	return c.ClientInfo, c.Path
-
 }
 
 func SendEnrollRequest(country, name, province, city, postC,
