@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/App-SammoRide/package/struct/common"
-	"github.com/App-SammoRide/package/struct/peer"
+	"github.com/App-SammoRide/package/client/struct/common"
+	"github.com/App-SammoRide/package/client/struct/peer"
 	"github.com/dgraph-io/badger/v3"
 )
 
@@ -37,6 +37,7 @@ func (chain *Blockchain) InitBlockchain(filepath string) {
 
 	err = db.Update(func(txn *badger.Txn) error {
 		err = txn.Set(blockHeader.Serialize(), block.Serialize())
+		err = txn.Set([]byte("LastHeader"), blockHeader.Serialize())
 		return err
 	})
 	CheckErr(err, "InitBlockchain/update")
@@ -63,13 +64,18 @@ func LoadDatabase(filepath string) *Blockchain {
 	chain := Blockchain{}
 	err = db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("LastHeader"))
+		if err != nil {
+			return err
+		}
 		err = item.Value(func(val []byte) error {
 			chain.LastHeader = *common.DeSerializeBlockHeader(val)
-			return err
+			return nil
 		})
 		return err
 	})
-	CheckErr(err, "LoadDatabase")
+
+	CheckErr(err, "LoadBlockchain")
+
 	chain.Database = db
 	return &chain
 }

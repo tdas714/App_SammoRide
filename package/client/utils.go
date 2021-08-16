@@ -165,6 +165,12 @@ func LoadConnections(path string) *Connections {
 	return ConnDeserialize(content)
 }
 
+func InitConnections(path string) *Connections{
+	conn := Connections{Path: path}
+	conn.Close()
+	return &conn
+}
+
 func ConnDeserialize(data []byte) *Connections {
 	var conn Connections
 

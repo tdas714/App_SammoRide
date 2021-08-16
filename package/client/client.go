@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	yaml "gopkg.in/yaml.v3"
@@ -24,8 +25,10 @@ type InputInfo struct {
 type FilePath struct {
 	CertificatePath string `yaml:"CertificatePath"`
 	KeyPath         string `yaml:"KeyPath"`
-	CAsPath         string `yaml:"CAsPath"`
+	InterCAPath     string `yaml:"InterCa"`
+	RootCAPath      string `yaml:"RootCa"`
 	UtilsPath       string `yaml:"UtilsPath"`
+	ChainPath       string `yaml:"ChainPath"`
 }
 
 type ClientInfo struct {
@@ -39,16 +42,40 @@ type ClientInfo struct {
 	PublicKey  string
 }
 
-func (c *InputInfo) Parse(filename string) {
-
+func Parse(filename string) *InputInfo {
+	var c *InputInfo
 	yamlFile, err := ioutil.ReadFile(filename)
 	CheckErr(err, "YamlFile Get")
-	err = yaml.Unmarshal(yamlFile, c)
+	err = yaml.Unmarshal(yamlFile, &c)
 	CheckErr(err, " Unmarshal Error")
+	InitFileStructure(*c.Path)
+	return c
+}
+
+func InitFileStructure(paths FilePath) {
+
+	dirCert := strings.Split(paths.CertificatePath, "/")[0]
+	fmt.Println("Cretificatre :", dirCert)
+	_ = os.Mkdir(dirCert, 0700)
+	dirKey := strings.Split(paths.KeyPath, "/")[0]
+	fmt.Println(dirKey)
+	_ = os.Mkdir(dirKey, 0700)
+
+	dirinter := strings.Split(paths.InterCAPath, "/")[0]
+	_ = os.Mkdir(dirinter, 0700)
+
+	dirroot := strings.Split(paths.RootCAPath, "/")[0]
+	_ = os.Mkdir(dirroot, 0700)
+
+	dir := strings.Split(paths.ChainPath, "/")[0]
+	_ = os.Mkdir(dir, 0700)
+
+	dir = strings.Split(paths.UtilsPath, "/")[0]
+	_ = os.Mkdir(dir, 0700)
 }
 
 func SendEnrollRequest(country, name, province, city, postC,
-	ipAddr, lPort, serverIp, serverPort string, paths *FilePath) ([]string, []string) {
+	ipAddr, lPort, serverIp, serverPort string, paths *FilePath, node *Node) ([]string, []string) {
 	enrollReq := &PeerEnrollDataRequest{Country: country, Name: name, Province: province, IpAddr: ipAddr,
 		City: city, PostalCode: postC, ListingPort: lPort}
 	json_data, err := json.Marshal(enrollReq)
@@ -58,7 +85,7 @@ func SendEnrollRequest(country, name, province, city, postC,
 
 	path := fmt.Sprintf(fmt.Sprintf("http://%s:%s/post",
 		serverIp, serverPort))
-
+	fmt.Println(path)
 	resp, err := http.Post(path, "application/json", bytes.NewBuffer(json_data))
 	CheckErr(err, "SendEnrollRequest/Post")
 
@@ -69,35 +96,36 @@ func SendEnrollRequest(country, name, province, city, postC,
 	VerifyOrderer(res.RootCert, res.SenderCert)
 	//
 
-	interca := fmt.Sprintf("%s/interCa.crt", paths.CAsPath)
-	rootca := fmt.Sprintf("%s/rootCa.crt", paths.CAsPath)
-
-	_ = os.Mkdir(paths.CAsPath, 0700)
-	_ = os.Mkdir(paths.CertificatePath, 0700)
-	_ = os.Mkdir(paths.KeyPath, 0700)
-
-	err = ioutil.WriteFile(interca, res.SenderCert, 0700)
+	//	_ = os.Mkdir(paths.CAsPath, 0700)
+	//	_ = os.Mkdir(paths.CertificatePath, 0700)
+	//	_ = os.Mkdir(paths.KeyPath, 0700)
+	//
+	err = ioutil.WriteFile(paths.InterCAPath, res.SenderCert, 0700)
 	CheckErr(err, "SendErollReq/interca")
-	err = ioutil.WriteFile(rootca, res.RootCert, 0700)
+	err = ioutil.WriteFile(paths.RootCAPath, res.RootCert, 0700)
 	CheckErr(err, "SendErollReq/rootca")
+
+	rootCa, err := ioutil.ReadFile(paths.RootCAPath)
+	CheckErr(err, "Node/RootCa")
+	interaC, err := ioutil.ReadFile(paths.InterCAPath)
+	CheckErr(err, "NewNode/Intervca")
+
+	node.RootCertificate = rootCa
+	node.InterCertificate = interaC
 
 	blocks, _ := pem.Decode(res.PeerCert)
 	if blocks == nil {
 		log.Panic("Block is nil")
 	}
 	// Public key
-	certOut, err := os.Create(fmt.Sprintf("%s/%s_%s_%s_%s_Cert.crt", paths.CertificatePath,
-		country, name, province,
-		city))
+	certOut, err := os.Create(fmt.Sprintf("%s", paths.CertificatePath))
 
 	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: blocks.Bytes})
 	certOut.Close()
 	log.Print("written cert.pem\n")
 
 	// Private Key
-	keyOut, err := os.OpenFile(fmt.Sprintf("%s/%s_%s_%s_%s_Cert.key", paths.KeyPath,
-		country, name, province,
-		city),
+	keyOut, err := os.OpenFile(fmt.Sprintf("%s", paths.KeyPath),
 		os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 
 	CheckErr(err, "SendEnrollRequest/keyOut")

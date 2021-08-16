@@ -8,7 +8,10 @@ Info:
   PostalCode: "700028"
 
 Path:
-  CertificatePath: "ClientCert1"
-  KeyPath: "ClientCert1"
-  CAsPath: "ClientCert1/CAs"
-  UtilsPath: "UtilsClient1"
+  CertificatePath: "Certificate/cert.crt"
+  KeyPath: "Certificate/priv.key"
+  CAsPath: "CAs"
+  UtilsPath: "UtilsClient"
+  ChainPath: "Chain"
+  InterCa: "CAs/inter.crt"
+  RootCa: "CAs/root.crt"

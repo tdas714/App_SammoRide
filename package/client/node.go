@@ -29,6 +29,7 @@ type Node struct {
 	Paths               *FilePath
 	Connection          *Connections
 	RootCertificate     []byte
+	InterCertificate    []byte
 	Certificatepath     string
 	KeyPath             string
 	GossipSentList      map[int64]string
@@ -42,41 +43,40 @@ type Node struct {
 	ActivityStatus      ActivityType
 }
 
-func NewNode(InputYml, dir string) *Node {
-	var i InputInfo
-	i.Parse(InputYml)
-
-	c := i.ClientInfo
-	paths := i.Path
-
-	// filepath := fmt.Sprintf("../%s/%s", dir, strings.Split(c.Name, ".")[0])
-	// CreateDirIfNotExist(filepath)
-
-	chainPath := fmt.Sprintf("../%s/%s", dir, "Chain")
-	CreateDirIfNotExist(chainPath)
+func InitNode(paths *FilePath, c *ClientInfo) *Node {
 
 	conn := LoadConnections(fmt.Sprintf("%s/connections.bin", paths.UtilsPath))
 	defer conn.Close()
 
-	cPath := fmt.Sprintf("%s/%s_%s_%s_%s_Cert.crt", paths.CertificatePath,
-		c.Country, c.Name, c.Province,
-		c.City)
-	kPath := fmt.Sprintf("%s/%s_%s_%s_%s_Cert.key", paths.KeyPath,
-		c.Country, c.Name, c.Province,
-		c.City)
+	gSL := make(map[int64]string)
+	gSL[time.Now().Unix()] = "Orderer"
+
+	fmt.Println("Cert Pamth: ", paths.CertificatePath)
+	node := Node{Info: c, Connection: conn, Certificatepath: paths.CertificatePath, KeyPath: paths.KeyPath, Paths: paths,
+		GossipSentList: gSL, SentProposal: make(map[time.Time]*peer.SignedProposal), RootCertificate: []byte(paths.RootCAPath), InterCertificate: []byte(paths.InterCAPath),
+		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement), WorldState: ledger.Init(), Blockchain: ledger.LoadDatabase(paths.ChainPath),
+		EndorsementPolicy: &common.ImplicitMetaPolicy{SubPolicy: common.Policy_PolicyType_name[1], Rule: common.ImplicitMetaPolicy_MAJORITY},
+		NumberOfEndorsers: &common.SignaturePolicy{Type: &common.SignaturePolicy_SignedBy{SignedBy: 3}}, ActivityStatus: FREE}
+
+	return &node
+}
+
+func NewNode(paths *FilePath, c *ClientInfo) *Node {
+
+	conn := InitConnections(fmt.Sprintf("%s/connections.bin", paths.UtilsPath))
+	defer conn.Close()
 
 	gSL := make(map[int64]string)
 	gSL[time.Now().Unix()] = "Orderer"
 
-	rootca, err := ioutil.ReadFile(fmt.Sprintf("%s/rootCa.crt", paths.CAsPath))
-	CheckErr(err, "Node/RootCa")
-
-	node := Node{Info: c, Connection: conn, Certificatepath: cPath, KeyPath: kPath, Paths: paths,
-		GossipSentList: gSL, RootCertificate: rootca, SentProposal: make(map[time.Time]*peer.SignedProposal),
-		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement), WorldState: ledger.Init(), Blockchain: ledger.LoadDatabase(chainPath),
+	blockchain := ledger.Blockchain{}
+	blockchain.InitBlockchain(paths.ChainPath)
+	defer blockchain.Close()
+	node := Node{Info: c, Connection: conn, Certificatepath: paths.CertificatePath, KeyPath: paths.KeyPath, Paths: paths,
+		GossipSentList: gSL, SentProposal: make(map[time.Time]*peer.SignedProposal),
+		ReceivedEndorsement: make(map[time.Time][]*peer.Endorsement), WorldState: ledger.Init(), Blockchain: &blockchain,
 		EndorsementPolicy: &common.ImplicitMetaPolicy{SubPolicy: common.Policy_PolicyType_name[1], Rule: common.ImplicitMetaPolicy_MAJORITY},
 		NumberOfEndorsers: &common.SignaturePolicy{Type: &common.SignaturePolicy_SignedBy{SignedBy: 3}}, ActivityStatus: FREE}
-
 	return &node
 }
 
@@ -90,18 +90,17 @@ func (node *Node) CreateNode() {
 	// This will return Peer-list and ordererlist
 	plist, olist := SendEnrollRequest(node.Info.Country, node.Info.Name,
 		node.Info.Province, node.Info.City, node.Info.Postalcode,
-		node.Info.IP, node.Info.Port, "192.168.0.5", "8080", node.Paths) //<--This will be dynamic
+		node.Info.IP, node.Info.Port, "202.142.113.190", "8080", node.Paths, node) //<--This will be dynamic
 
 	node.Connection.AddPeer(plist)
 	node.Connection.AddOrderer(olist)
 	node.Connection.Close()
+
 }
 
 func (node *Node) JoinNetwork() {
-	interca := fmt.Sprintf("%s/interCa.crt", node.Paths.CAsPath)
-	rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 
-	StartPeerServer(interca, rootca,
+	StartPeerServer(node.Paths.InterCAPath, node.Paths.RootCAPath,
 		node.Certificatepath, node.KeyPath, node)
 	fmt.Println("Server Listing in port: ", node.Info.Port)
 	node.ActivityStatus = FREE
@@ -111,14 +110,12 @@ func (node *Node) AnnounceAvailability() {
 	// var splited []string
 	// pList := node.Connection.GetRandom(1)
 
-	rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
-
 	riderA := RiderAnnouncement{Header: time.Now().Unix(), Latitude: "lat", Longitude: "long", Avalability: "avail", Info: node.Info}
 	var splited []string
 	if node.ActivityStatus == FREE {
 		for _, o := range node.Connection.GetRandomOrderer(1) {
 			splited = strings.Split(o, ":")
-			SendData(rootca,
+			SendData(node.Paths.RootCAPath,
 				node.Certificatepath, node.KeyPath, splited[0], splited[1],
 				"Announcement/rider", riderA.RASerialize(), 2)
 		}
@@ -160,9 +157,7 @@ func (node *Node) SendProposalToRider(c ClientInfo, pickup, des string) {
 		TravelerSignature: sig.Serialize(),
 		TravelerPublicKey: Keyencode(&LoadPrivateKey(keyPem).PublicKey)}
 
-	interca := fmt.Sprintf("%s/interCa.crt", node.Paths.CAsPath)
-
-	resp := SendData(interca, node.Certificatepath, node.KeyPath,
+	resp := SendData(node.Paths.RootCAPath, node.Certificatepath, node.KeyPath,
 		c.IP, c.Port, "Transaction/Proposal", signedProp.Serialize(),
 		10)
 
@@ -198,13 +193,12 @@ func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal, c Clie
 	fmt.Println("Sending to endorser: ", c.IP+" "+"4000") // Have to change that to perform organically
 	if int32(node.Connection.len()) >= node.NumberOfEndorsers.GetSignedBy() {
 
-		rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 		var splited []string
 		endorsList := node.Connection.GetRandomPeer(int(node.NumberOfEndorsers.GetSignedBy()))
 		for _, endor := range endorsList {
 			splited = strings.Split(endor, ":")
 			fmt.Println(splited)
-			SendData(rootca,
+			SendData(node.Paths.RootCAPath,
 				node.Certificatepath, node.KeyPath, c.IP, "4000",
 				"Endorcers/SignedProposal", signedProp.Serialize(), 2)
 		}
@@ -214,13 +208,12 @@ func (node *Node) SendProposalToEndorser(signedProp *peer.SignedProposal, c Clie
 
 func (node *Node) GetSnapshot(numSnap int64) {
 
-	rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 	var resp []byte
 	var splited []string
 	for _, o := range node.Connection.GetRandomOrderer(1) {
 		splited = strings.Split(o, ":")
 
-		resp = SendData(rootca,
+		resp = SendData(node.Paths.RootCAPath,
 			node.Certificatepath, node.KeyPath, splited[0], "8443",
 			"Request/BlockSnapshot", IntToByteArray(numSnap), 2)
 
@@ -242,19 +235,18 @@ func (node *Node) Gossip(header int64, num int, data []byte, ipAddr, domain stri
 	_, ok := node.GossipSentList[header]
 	if !ok {
 		var splited []string
-		rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
 		pList := node.Connection.GetRandomPeer(num)
 		for _, p := range pList {
 			if !strings.Contains(p, node.Info.IP+":"+node.Info.Port) {
 				splited = strings.Split(p, ":")
-				SendData(rootca,
+				SendData(node.Paths.RootCAPath,
 					node.Certificatepath, node.KeyPath, splited[0], splited[1],
 					domain, data, 1)
 			}
 		}
 		for _, o := range node.Connection.OrdererList {
 			splited = strings.Split(o, ":")
-			SendData(rootca,
+			SendData(node.Paths.RootCAPath,
 				node.Certificatepath, node.KeyPath, splited[0], "8443",
 				domain, data, 1)
 

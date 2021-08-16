@@ -99,11 +99,7 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 	if travelerV && driverV {
 		fmt.Println("verify")
 
-		// certPem, err := ioutil.ReadFile(node.Certificatepath)
-		// CheckErr(err, "OrderProposalhandler/CertPem")
-		interca := fmt.Sprintf("%s/interCa.crt", node.Paths.CAsPath)
-
-		interPem, err := ioutil.ReadFile(interca)
+		interPem, err := ioutil.ReadFile(node.Paths.InterCAPath)
 		CheckErr(err, "Interca")
 
 		proposal := peer.DeSerializeProposal(signedProposal.ProposalBytes)
@@ -146,9 +142,7 @@ func Endorse(w http.ResponseWriter, resp *http.Request, node *Node) {
 						proposalRes.Endorsement = &endorcer
 						fmt.Println("sending signed endorsement: ", chaincodeProp.IPs[0], chaincodeProp.Ports[0])
 
-						rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
-
-						SendData(rootca,
+						SendData(node.Paths.RootCAPath,
 							node.Certificatepath, node.KeyPath, chaincodeProp.IPs[0], chaincodeProp.Ports[0],
 							"Traveler/SignedEndorsement", proposalRes.Serialize(), 2)
 					}
@@ -197,13 +191,11 @@ func EndorsementResponseHandler(w http.ResponseWriter, resp *http.Request, node 
 
 						transaction := peer.Transaction{Actions: []*peer.TransactionAction{&transactionAcion}}
 
-						rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
-
 						var splited []string
 						for _, o := range node.Connection.GetRandomOrderer(1) {
 							splited = strings.Split(o, ":")
 							// SENDING TRANSACTION  TO ORDER FOR BLOCK CONSTRACTION
-							SendData(rootca,
+							SendData(node.Paths.RootCAPath,
 								node.Certificatepath, node.KeyPath, splited[0], "8443",
 								"TransactionCommitmentRequest", transaction.Serialize(), 2)
 							fmt.Println("Sent  to orderer")
@@ -224,8 +216,6 @@ func BlockCommitmentHandler(w http.ResponseWriter, resp *http.Request, node *Nod
 	blockData := block.GetData()
 	// var valid bool
 	var data [][]byte
-	rootca := fmt.Sprintf("%s/rootCa.crt", node.Paths.CAsPath)
-
 	for _, d := range blockData.GetData() {
 		t := peer.DeSerializeTransaction(d)
 		t.VerifySignatures()
@@ -238,7 +228,7 @@ func BlockCommitmentHandler(w http.ResponseWriter, resp *http.Request, node *Nod
 			ports = chaincodeProp.Ports
 		}
 		for i := range ips {
-			SendData(rootca,
+			SendData(node.Paths.RootCAPath,
 				node.Certificatepath, node.KeyPath, ips[i], ports[i],
 				"Committment/notification", block.Serialize(), 2)
 		}

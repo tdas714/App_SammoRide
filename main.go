@@ -5,18 +5,21 @@ import (
 	"fmt"
 	"strings"
 
-	// ride "github.com/App-SammoRide/chaincodes/Ride"
-
 	"github.com/App-SammoRide/package/client"
-	// "github.com/App-SammoRide/node"
 )
+
+// ride "github.com/App-SammoRide/chaincodes/Ride"
+
+// "github.com/App-SammoRide/node"
 
 func main() {
 	InputYml := flag.String("in", "InputFile", "InfoFile")
 	flag.Parse()
 
-	node := client.NewNode(*InputYml, "ClientDatabase")
+	inputinfo := client.Parse(*InputYml)
 
+	node := client.NewNode(inputinfo.Path, inputinfo.ClientInfo)
+	fmt.Println(node.RootCertificate)
 	fmt.Println(node.Info.City, node.Info.Country, node.Info.Name)
 
 	for {
@@ -29,13 +32,13 @@ func main() {
 			node.CreateNode()
 		} else if client.Contains([]string{"1", "2", "3"}, in) {
 			var c *client.ClientInfo
-			var i client.InputInfo
+			var i *client.InputInfo
 			if in == "1" {
-				i.Parse("ClientInfo/client_1.yml")
+				i = client.Parse("ClientInfo/client_1.yml")
 			} else if in == "2" {
-				i.Parse("ClientInfo/client_2.yml")
+				i = client.Parse("ClientInfo/client_2.yml")
 			} else if in == "3" {
-				i.Parse("ClientInfo/client_3.yml")
+				i = client.Parse("ClientInfo/client_3.yml")
 			} else {
 				continue
 			}
